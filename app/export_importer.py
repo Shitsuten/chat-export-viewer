@@ -317,7 +317,11 @@ def _parse_plain(name: str, text: str) -> list[dict[str, Any]]:
 
 
 def _conversation(name: str, data: dict[str, Any]) -> dict[str, Any]:
-    messages = [item for item in data.get("messages", []) if item.get("text") or item.get("attachments")]
+    messages = [
+        item
+        for item in data.get("messages", [])
+        if item.get("text") or item.get("thinking") or item.get("traces") or item.get("attachments")
+    ]
     title = re.sub(r"\s+", " ", str(data.get("title") or PurePosixPath(name).stem or "Imported chat")).strip()[:120]
     created = data.get("created_at") or next((item.get("timestamp") for item in messages if item.get("timestamp")), None)
     updated = data.get("updated_at") or next((item.get("timestamp") for item in reversed(messages) if item.get("timestamp")), created)
@@ -371,17 +375,19 @@ def _chatgpt_message(message: dict[str, Any], index: int) -> dict[str, Any]:
 
 
 def _visible_text(message: dict[str, Any], nested: dict[str, Any], content: Any) -> str:
-    direct = message.get("text") or nested.get("content") or nested.get("text")
-    if isinstance(direct, str) and direct.strip():
-        return direct
     if isinstance(content, list):
-        return "\n\n".join(
+        block_text = "\n\n".join(
             block.get("text", "")
             for block in content
             if isinstance(block, dict)
             and block.get("type") == "text"
             and isinstance(block.get("text"), str)
         )
+        if block_text.strip():
+            return block_text
+    direct = message.get("text") or nested.get("content") or nested.get("text")
+    if isinstance(direct, str) and direct.strip():
+        return direct
     return _text(content) or _text(message.get("message")) or ""
 
 
@@ -391,20 +397,31 @@ def _thinking_and_traces(content: Any) -> tuple[str, str, list[dict[str, Any]]]:
     thinking_parts: list[str] = []
     summaries: list[str] = []
     traces: list[dict[str, Any]] = []
+    has_tool_trace = False
     for block in content:
         if not isinstance(block, dict):
             continue
         block_type = block.get("type")
         if block_type == "thinking":
             thought = _trim(block.get("thinking"))
+            block_summaries: list[str] = []
             if thought:
                 thinking_parts.append(thought)
             for item in block.get("summaries") or []:
                 if isinstance(item, dict) and _trim(item.get("summary")):
-                    summaries.append(_trim(item.get("summary")))
+                    block_summaries.append(_trim(item.get("summary")))
                 elif _trim(item):
-                    summaries.append(_trim(item))
+                    block_summaries.append(_trim(item))
+            summaries.extend(block_summaries)
+            if thought:
+                traces.append({
+                    "type": "thinking",
+                    "id": block.get("id") or stable_id("thinking", thought[:160], str(len(traces))),
+                    "text": thought,
+                    "summary": block_summaries[-1] if block_summaries else "",
+                })
         elif block_type == "tool_use":
+            has_tool_trace = True
             traces.append({
                 "type": "tool_use",
                 "id": block.get("id") or block.get("tool_use_id") or stable_id(block.get("name"), json.dumps(block.get("input"), ensure_ascii=False, sort_keys=True)),
@@ -412,6 +429,7 @@ def _thinking_and_traces(content: Any) -> tuple[str, str, list[dict[str, Any]]]:
                 "input": block.get("input"),
             })
         elif block_type == "tool_result":
+            has_tool_trace = True
             traces.append({
                 "type": "tool_result",
                 "tool_use_id": block.get("tool_use_id") or block.get("id"),
@@ -419,7 +437,9 @@ def _thinking_and_traces(content: Any) -> tuple[str, str, list[dict[str, Any]]]:
                 "content": _text(block.get("content"))[:4000],
                 "is_error": bool(block.get("is_error")),
             })
-    return "\n\n".join(thinking_parts).strip(), (summaries[-1] if summaries else ""), traces
+    if has_tool_trace:
+        return "", "", traces
+    return "\n\n".join(thinking_parts).strip(), (summaries[-1] if summaries else ""), []
 
 
 def _trim(value: Any) -> str:
