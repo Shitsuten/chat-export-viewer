@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+
+# Local private data
+conversations.db
+conversations.db-*
+profile.json
+memories/
+uploads/
+
+# Local smoke-test artifacts
+/tmp/
+.DS_Store

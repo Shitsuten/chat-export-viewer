@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat Export Viewer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23bd6244'/%3E%3Cpath d='M18 22h28v6H18zm0 12h20v6H18z' fill='%23fff8f1'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f7f4ee;
+  --panel:#fffdf8;
+  --panel-soft:#efebe2;
+  --ink:#24211d;
+  --muted:#7c7469;
+  --line:#ded8cd;
+  --accent:#bd6244;
+  --accent-ink:#fff8f1;
+  --shadow:0 18px 54px rgba(42,35,26,.12),0 2px 10px rgba(42,35,26,.06);
+  --radius:18px;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:
+    radial-gradient(circle at 18% 8%,rgba(189,98,68,.13),transparent 28%),
+    linear-gradient(135deg,#fbf8f1 0%,#f2eee6 46%,#ebe4d9 100%);
+  color:var(--ink);
+  font:15px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
+}
+button,input{font:inherit}
+button{border:0;cursor:pointer}
+.app{height:100%;display:grid;grid-template-columns:minmax(280px,340px) 1fr;overflow:hidden}
+.sidebar{
+  min-width:0;
+  border-right:1px solid rgba(82,70,55,.14);
+  background:rgba(247,244,238,.78);
+  backdrop-filter:blur(18px);
+  display:flex;
+  flex-direction:column;
+  padding:18px 14px;
+  gap:14px;
+}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 4px}
+.brand h1{margin:0;font:650 22px/1.1 ui-serif,Georgia,"Times New Roman",serif;letter-spacing:.01em}
+.privacy{font-size:12px;color:var(--muted);border:1px solid rgba(82,70,55,.12);border-radius:999px;padding:5px 9px;background:rgba(255,253,248,.58);white-space:nowrap}
+.drop{
+  position:relative;
+  display:grid;
+  gap:10px;
+  padding:18px;
+  border:1px dashed rgba(189,98,68,.45);
+  border-radius:var(--radius);
+  background:rgba(255,253,248,.72);
+  box-shadow:0 1px 0 rgba(255,255,255,.8) inset;
+}
+.drop.drag{background:#fff7ef;border-color:var(--accent)}
+.drop strong{font-size:16px}
+.drop span{color:var(--muted);font-size:13px}
+.file-row{display:flex;align-items:center;gap:10px}
+.file-button{width:max-content;border-radius:999px;background:var(--ink);color:#fff;padding:9px 13px;font-weight:650}
+#fileInput{position:absolute;inset:0;opacity:0;cursor:pointer}
+.status{min-height:22px;padding:0 4px;color:var(--muted);font-size:13px}
+.search{height:40px;display:flex;align-items:center;gap:9px;padding:0 12px;border:1px solid rgba(82,70,55,.12);border-radius:14px;background:rgba(255,253,248,.76)}
+.search svg{width:17px;height:17px;color:var(--muted)}
+.search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink)}
+.search input::placeholder{color:#9c9489}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{padding:10px;border-radius:14px;background:rgba(255,253,248,.58);border:1px solid rgba(82,70,55,.08)}
+.stat b{display:block;font-size:18px;line-height:1.1}
+.stat span{display:block;margin-top:4px;color:var(--muted);font-size:12px}
+.list{min-height:0;overflow:auto;padding-right:2px;display:flex;flex-direction:column;gap:6px}
+.item{
+  width:100%;
+  min-height:44px;
+  display:block;
+  text-align:left;
+  padding:9px 11px;
+  border-radius:14px;
+  color:var(--ink);
+  background:transparent;
+}
+.item:hover,.item.active{background:rgba(36,33,29,.07)}
+.item-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:560}
+.item-meta{display:block;margin-top:2px;color:var(--muted);font-size:12px}
+.main{min-width:0;height:100%;display:grid;grid-template-rows:auto 1fr auto;background:rgba(255,253,248,.44)}
+.top{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:18px 24px;
+  border-bottom:1px solid rgba(82,70,55,.12);
+}
+.title{min-width:0}
+.title h2{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:650 20px/1.2 ui-serif,Georgia,"Times New Roman",serif}
+.title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.download{
+  flex:none;
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border-radius:999px;
+  background:var(--accent);
+  color:var(--accent-ink);
+  padding:10px 14px;
+  text-decoration:none;
+  font-weight:700;
+  box-shadow:0 8px 20px rgba(189,98,68,.22);
+}
+.download svg{width:17px;height:17px}
+.empty{
+  height:100%;
+  display:grid;
+  place-items:center;
+  padding:24px;
+}
+.empty-card{
+  width:min(680px,100%);
+  padding:28px;
+  border-radius:24px;
+  background:rgba(255,253,248,.72);
+  border:1px solid rgba(82,70,55,.12);
+  box-shadow:var(--shadow);
+}
+.empty-card h2{margin:0 0 8px;font:700 32px/1.05 ui-serif,Georgia,"Times New Roman",serif}
+.empty-card p{margin:0;color:var(--muted)}
+.stream{min-height:0;overflow:auto;padding:24px}
+.messages{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.msg{display:grid;gap:8px}
+.role{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.bubble{
+  width:fit-content;
+  max-width:min(720px,100%);
+  padding:13px 15px;
+  border-radius:18px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  background:var(--panel);
+  border:1px solid rgba(82,70,55,.10);
+  box-shadow:0 1px 0 rgba(255,255,255,.85) inset;
+}
+.msg.user{align-items:end}
+.msg.user .role{text-align:right}
+.msg.user .bubble{background:#e9dfd0;border-color:rgba(82,70,55,.08)}
+.details{display:grid;gap:8px;max-width:min(720px,100%)}
+details{
+  border:1px solid rgba(82,70,55,.12);
+  border-radius:14px;
+  background:rgba(255,253,248,.62);
+  overflow:hidden;
+}
+summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
+.details-body{padding:0 12px 12px;white-space:pre-wrap;color:#4b443b;font-size:13px;overflow-wrap:anywhere}
+.tool-row{padding:10px 12px;border-top:1px solid rgba(82,70,55,.10)}
+.tool-row:first-child{border-top:0}
+.tool-name{font-weight:700;color:#4b443b}
+.tool-output{margin-top:5px;color:var(--muted);white-space:pre-wrap;font-size:13px;max-height:190px;overflow:auto}
+.composer{
+  padding:16px 24px 20px;
+  background:linear-gradient(180deg,rgba(255,253,248,0),rgba(255,253,248,.86) 24%);
+}
+.composer-inner{
+  max-width:820px;
+  margin:0 auto;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:10px 12px;
+  border:1px solid rgba(82,70,55,.14);
+  border-radius:20px;
+  background:rgba(255,253,248,.86);
+  box-shadow:0 8px 30px rgba(42,35,26,.08);
+}
+.composer input{
+  flex:1;
+  min-width:0;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--muted);
+}
+.composer button{
+  flex:none;
+  border-radius:999px;
+  background:var(--ink);
+  color:#fff;
+  padding:9px 12px;
+  font-weight:700;
+}
+.hidden{display:none!important}
+@media(max-width:820px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .sidebar{height:44dvh;border-right:0;border-bottom:1px solid rgba(82,70,55,.14)}
+  .main{height:56dvh}
+  .top{padding:14px 16px}
+  .stream{padding:16px}
+  .download span{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>Export Viewer</h1>
+      <div class="privacy">local only</div>
+    </div>
+    <label class="drop" id="dropZone">
+      <strong>Drop Claude / ChatGPT export zip</strong>
+      <span>Only read in this browser. Nothing is uploaded or stored.</span>
+      <span class="file-row"><span class="file-button">Choose file</span><span id="fileName">zip / json / jsonl / txt</span></span>
+      <input id="fileInput" type="file" accept=".zip,.json,.jsonl,.txt,.md,.markdown,application/zip,application/json">
+    </label>
+    <div class="status" id="status">Ready.</div>
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="searchInput" placeholder="Search chats" autocomplete="off">
+    </label>
+    <div class="stats">
+      <div class="stat"><b id="chatCount">0</b><span>chats</span></div>
+      <div class="stat"><b id="messageCount">0</b><span>messages</span></div>
+      <div class="stat"><b id="memoryCount">0</b><span>memories</span></div>
+    </div>
+    <div class="list" id="conversationList"></div>
+  </aside>
+  <main class="main">
+    <header class="top">
+      <div class="title">
+        <h2 id="activeTitle">Read-only export preview</h2>
+        <p id="activeMeta">Import an export to inspect conversations locally.</p>
+      </div>
+      <a class="download" id="downloadLink" href="#" target="_blank" rel="noreferrer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span>Download & deploy</span>
+      </a>
+    </header>
+    <section class="empty" id="emptyState">
+      <div class="empty-card">
+        <h2>Preview exported chats without a server.</h2>
+        <p>Upload a Claude or ChatGPT export zip. This page parses the archive in memory, shows conversations, thinking summaries, tool traces, memories, and project prompts in read-only mode.</p>
+      </div>
+    </section>
+    <section class="stream hidden" id="stream"><div class="messages" id="messages"></div></section>
+    <footer class="composer">
+      <div class="composer-inner">
+        <input disabled value="" placeholder="部署本项目即可接入自己的 API 继续聊天。这个 GitHub Pages 预览页只读，不会发送或保存数据。">
+        <button id="deployButton" type="button">Deploy</button>
+      </div>
+    </footer>
+  </main>
+</div>
+<script>
+const TEXT_EXTENSIONS=new Set(['.json','.jsonl','.txt','.md','.markdown']);
+const state={conversations:[],memories:[],projects:[],active:null,query:''};
+const $=id=>document.getElementById(id);
+const status=msg=>$('status').textContent=msg;
+const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const basename=name=>String(name||'').split('/').pop();
+const ext=name=>{const b=basename(name).toLowerCase();const i=b.lastIndexOf('.');return i>=0?b.slice(i):''};
+const stableId=(...parts)=>{let h=2166136261;for(const part of parts.join('\n')){h^=part.charCodeAt(0);h=Math.imul(h,16777619)}return (h>>>0).toString(16)};
+
+function inferRepoLinks(){
+  const host=location.hostname;
+  let repo='https://github.com/';
+  let zip='https://github.com/';
+  if(host.endsWith('.github.io')){
+    const owner=host.replace(/\.github\.io$/,'');
+    const name=location.pathname.split('/').filter(Boolean)[0]||'agent-app';
+    repo=`https://github.com/${owner}/${name}`;
+    zip=`${repo}/archive/refs/heads/main.zip`;
+  }
+  $('downloadLink').href=zip;
+  $('deployButton').onclick=()=>window.open(repo,'_blank','noopener,noreferrer');
+}
+
+function readUInt16(view,offset){return view.getUint16(offset,true)}
+function readUInt32(view,offset){return view.getUint32(offset,true)}
+async function inflateRaw(bytes){
+  if(!('DecompressionStream' in window))throw new Error('This browser cannot inflate zip entries. Use a recent Chrome, Edge, or Safari.');
+  const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function unzip(buffer){
+  const view=new DataView(buffer);
+  let eocd=-1;
+  for(let i=buffer.byteLength-22;i>=Math.max(0,buffer.byteLength-65558);i--){
+    if(readUInt32(view,i)===0x06054b50){eocd=i;break}
+  }
+  if(eocd<0)throw new Error('Zip central directory not found.');
+  const total=readUInt16(view,eocd+10);
+  let ptr=readUInt32(view,eocd+16);
+  const files=[];
+  for(let i=0;i<total;i++){
+    if(readUInt32(view,ptr)!==0x02014b50)break;
+    const method=readUInt16(view,ptr+10);
+    const compressedSize=readUInt32(view,ptr+20);
+    const nameLen=readUInt16(view,ptr+28);
+    const extraLen=readUInt16(view,ptr+30);
+    const commentLen=readUInt16(view,ptr+32);
+    const localOffset=readUInt32(view,ptr+42);
+    const name=new TextDecoder('utf-8').decode(new Uint8Array(buffer,ptr+46,nameLen));
+    ptr+=46+nameLen+extraLen+commentLen;
+    if(name.endsWith('/'))continue;
+    if(readUInt32(view,localOffset)!==0x04034b50)continue;
+    const localNameLen=readUInt16(view,localOffset+26);
+    const localExtraLen=readUInt16(view,localOffset+28);
+    const dataStart=localOffset+30+localNameLen+localExtraLen;
+    const compressed=new Uint8Array(buffer,dataStart,compressedSize);
+    let bytes;
+    if(method===0)bytes=new Uint8Array(compressed);
+    else if(method===8)bytes=await inflateRaw(compressed);
+    else continue;
+    files.push({name,bytes});
+  }
+  return files;
+}
+
+function skipMember(name){
+  const parts=String(name).split('/');
+  const base=parts[parts.length-1]||'';
+  return parts.includes('__MACOSX')||base.startsWith('._')||base==='.DS_Store';
+}
+function looksLikeClaudeExport(names){
+  const bases=new Set(names.map(n=>basename(n).toLowerCase()));
+  return bases.has('conversations.json')||bases.has('memories.json')||names.some(n=>n.replaceAll('\\','/').toLowerCase().includes('design_chats/')&&n.toLowerCase().endsWith('.json'));
+}
+function shouldParse(name,known){
+  if(skipMember(name)||!TEXT_EXTENSIONS.has(ext(name)))return false;
+  if(!known)return true;
+  const n=String(name).replaceAll('\\','/').toLowerCase();
+  const b=basename(n);
+  const rooted=`/${n}`;
+  return b==='conversations.json'||b==='memories.json'||rooted.includes('/design_chats/')||rooted.includes('/projects/');
+}
+
+async function parseFile(file){
+  $('fileName').textContent=file.name;
+  status('Reading file...');
+  const buffer=await file.arrayBuffer();
+  let docs=[];
+  if(file.name.toLowerCase().endsWith('.zip')){
+    const files=await unzip(buffer);
+    const known=looksLikeClaudeExport(files.map(f=>f.name));
+    docs=files.filter(f=>shouldParse(f.name,known)).map(f=>({name:f.name,text:new TextDecoder('utf-8').decode(f.bytes)}));
+  }else{
+    docs=[{name:file.name,text:new TextDecoder('utf-8').decode(buffer)}];
+  }
+  const conversations=[];
+  const memories=[];
+  const projects=[];
+  for(const doc of docs){
+    const parsed=parseDocument(doc.name,doc.text);
+    conversations.push(...parsed.conversations);
+    memories.push(...parsed.memories);
+    projects.push(...parsed.projects);
+  }
+  conversations.sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')));
+  state.conversations=conversations;
+  state.memories=memories;
+  state.projects=projects;
+  state.active=conversations[0]||null;
+  updateStats();
+  renderList();
+  renderActive();
+  status(conversations.length?`Parsed ${conversations.length} conversations locally.`:'No conversations found in this export.');
+}
+
+function parseDocument(name,text){
+  const out={conversations:[],memories:[],projects:[]};
+  if(ext(name)==='.jsonl'){
+    const messages=[];
+    text.split(/\r?\n/).forEach((line,i)=>{
+      if(!line.trim())return;
+      try{
+        const item=JSON.parse(line);
+        const parsed=parsePayload(`${name}:${i+1}`,item);
+        if(parsed.length)out.conversations.push(...parsed);
+        else if(item&&typeof item==='object')messages.push(messageFrom(item,i));
+      }catch{}
+    });
+    if(messages.length)out.conversations.push(conversation(name,{messages,source_type:'jsonl'}));
+    return out;
+  }
+  if(ext(name)==='.json'){
+    try{
+      const payload=JSON.parse(text);
+      out.conversations.push(...parsePayload(name,payload));
+      const memory=memoryPayload(name,payload);
+      if(memory.memories.length)out.memories.push(...memory.memories);
+      if(memory.projects.length)out.projects.push(...memory.projects);
+      return out;
+    }catch{}
+  }
+  const plain=parsePlain(name,text);
+  if(plain)out.conversations.push(plain);
+  return out;
+}
+
+function parsePayload(name,payload){
+  if(Array.isArray(payload)){
+    if(payload.every(x=>x&&typeof x==='object'&&looksLikeMessage(x)))return [conversation(name,{messages:payload.map(messageFrom)})];
+    return payload.flatMap((item,i)=>item&&typeof item==='object'?parseObject(`${name}#${i+1}`,item):[]);
+  }
+  if(payload&&typeof payload==='object')return parseObject(name,payload);
+  return [];
+}
+function parseObject(name,obj){
+  if(obj.mapping&&typeof obj.mapping==='object')return [chatgptConversation(name,obj)];
+  if(Array.isArray(obj.chat_messages))return [claudeConversation(name,obj,'chat_messages')];
+  if(Array.isArray(obj.messages))return [claudeConversation(name,obj,'messages')];
+  for(const key of ['conversations','chats','items','data']){
+    if(Array.isArray(obj[key]))return parsePayload(`${name}/${key}`,obj[key]);
+  }
+  if(looksLikeMessage(obj))return [conversation(name,{messages:[messageFrom(obj,0)]})];
+  return [];
+}
+function claudeConversation(name,obj,key){
+  return conversation(name,{
+    source_id:String(obj.uuid||obj.id||stableId(name)),
+    title:obj.name||obj.title,
+    summary:obj.summary||'',
+    created_at:obj.created_at||obj.createdAt,
+    updated_at:obj.updated_at||obj.updatedAt,
+    messages:(obj[key]||[]).filter(x=>x&&typeof x==='object').map(messageFrom),
+    source_type:'claude-export'
+  });
+}
+function chatgptConversation(name,obj){
+  const nodes=Object.values(obj.mapping||{}).filter(n=>n&&n.message).map(n=>[n.message.create_time||0,n.message]).sort((a,b)=>a[0]-b[0]);
+  return conversation(name,{
+    source_id:String(obj.id||obj.conversation_id||stableId(name,obj.title||'')),
+    title:obj.title,
+    created_at:timestampToIso(obj.create_time),
+    updated_at:timestampToIso(obj.update_time),
+    messages:nodes.map(([,m],i)=>chatgptMessage(m,i)),
+    source_type:'chatgpt-export'
+  });
+}
+function parsePlain(name,text){
+  const parts=String(text).split(/^\s*(user|human|assistant|claude|system|tool)\s*:\s*/gim);
+  const messages=[];
+  if(parts.length>1){
+    if(parts[0].trim())messages.push(plainMessage(name,'system',parts[0],0));
+    for(let i=1;i<parts.length;i+=2){
+      const body=parts[i+1]||'';
+      if(body.trim())messages.push(plainMessage(name,parts[i],body,i));
+    }
+  }else if(text.trim()){
+    messages.push(plainMessage(name,'system',text,0));
+  }
+  return messages.length?conversation(name,{title:basename(name),messages,source_type:'plain-text'}):null;
+}
+function conversation(name,data){
+  const messages=(data.messages||[]).filter(m=>m.text||m.thinking||m.traces?.length);
+  const title=String(data.title||basename(name).replace(/\.[^.]+$/,'')||'Imported chat').replace(/\s+/g,' ').trim().slice(0,120);
+  const created=data.created_at||messages.find(m=>m.timestamp)?.timestamp||null;
+  const updated=data.updated_at||[...messages].reverse().find(m=>m.timestamp)?.timestamp||created;
+  return {source_id:data.source_id||stableId(name,title,String(created),String(messages.length)),title,summary:data.summary||'',source:name,source_type:data.source_type||'imported',created_at:created,updated_at:updated,messages};
+}
+function plainMessage(name,role,body,index){return {source_id:stableId(name,String(index),body.slice(0,120)),role:normalizeRole(role),text:body.trim(),thinking:'',attachments:[],traces:[],timestamp:null}}
+function chatgptMessage(message,index){
+  const author=message.author||{};
+  const content=message.content||{};
+  const parts=content.parts;
+  const text=Array.isArray(parts)?parts.map(textValue).filter(Boolean).join('\n\n'):textValue(content);
+  return {source_id:String(message.id||stableId(String(index),text.slice(0,120))),role:normalizeRole(author.role),text:text.trim(),thinking:'',attachments:[],traces:[],timestamp:timestampToIso(message.create_time)||message.created_at||null};
+}
+function messageFrom(message,index=0){
+  const nested=message.content&&typeof message.content==='object'&&!Array.isArray(message.content)?message.content:{};
+  const content=message.content;
+  const text=visibleText(message,nested,content);
+  const parsed=thinkingAndTraces(content);
+  const role=normalizeRole(message.role||nested.role||message.sender||message.author);
+  const timestamp=message.created_at||message.createdAt||message.timestamp||nested.timestamp||null;
+  if(parsed.summary)parsed.traces.unshift({type:'summary',text:parsed.summary});
+  return {source_id:String(message.uuid||message.id||nested.id||stableId(role,String(index),text.slice(0,120))),role,text:text.trim(),thinking:parsed.thinking,attachments:[],traces:parsed.traces,timestamp};
+}
+function visibleText(message,nested,content){
+  const direct=message.text||nested.content||nested.text;
+  if(typeof direct==='string'&&direct.trim())return direct;
+  if(Array.isArray(content))return content.filter(b=>b&&b.type==='text'&&typeof b.text==='string').map(b=>b.text).join('\n\n');
+  return textValue(content)||textValue(message.message)||'';
+}
+function thinkingAndTraces(content){
+  const thinking=[];
+  const summaries=[];
+  const traces=[];
+  if(!Array.isArray(content))return {thinking:'',summary:'',traces};
+  for(const block of content){
+    if(!block||typeof block!=='object')continue;
+    if(block.type==='thinking'){
+      if(String(block.thinking||'').trim())thinking.push(String(block.thinking).trim());
+      for(const item of block.summaries||[]){
+        if(item&&typeof item==='object'&&String(item.summary||'').trim())summaries.push(String(item.summary).trim());
+        else if(String(item||'').trim())summaries.push(String(item).trim());
+      }
+    }else if(block.type==='tool_use'){
+      traces.push({type:'tool_use',id:block.id||block.tool_use_id||stableId(block.name,JSON.stringify(block.input||{})),name:block.name||block.message||'tool',input:block.input});
+    }else if(block.type==='tool_result'){
+      traces.push({type:'tool_result',tool_use_id:block.tool_use_id||block.id,name:block.name||block.message||'tool',content:textValue(block.content).slice(0,4000),is_error:!!block.is_error});
+    }
+  }
+  return {thinking:thinking.join('\n\n'),summary:summaries[summaries.length-1]||'',traces};
+}
+function memoryPayload(name,payload){
+  const result={memories:[],projects:[]};
+  if(Array.isArray(payload)){
+    for(const item of payload){
+      const parsed=memoryPayload(name,item);
+      result.memories.push(...parsed.memories);
+      result.projects.push(...parsed.projects);
+    }
+    return result;
+  }
+  if(!payload||typeof payload!=='object')return result;
+  if(basename(name).toLowerCase()==='memories.json'){
+    const cm=String(payload.conversations_memory||'').trim();
+    if(cm)result.memories.push(...cm.split(/\n{2,}/).map(x=>x.replace(/^[-*]\s*/,'').trim()).filter(Boolean));
+    if(payload.project_memories&&typeof payload.project_memories==='object'){
+      for(const [id,text] of Object.entries(payload.project_memories))if(String(text||'').trim())result.projects.push({id,text:String(text).trim()});
+    }
+  }
+  if(payload.uuid||payload.prompt_template||payload.docs){
+    const id=String(payload.uuid||stableId(name,payload.name||''));
+    const parts=[`Project: ${payload.name||basename(name)}`,`ID: ${id}`];
+    if(String(payload.description||'').trim())parts.push(`Description:\n${payload.description}`);
+    if(String(payload.prompt_template||'').trim())parts.push(`Prompt template:\n${payload.prompt_template}`);
+    if(Array.isArray(payload.docs)){
+      const docs=payload.docs.filter(d=>d&&String(d.content||'').trim()).map(d=>`${d.filename||'document'}:\n${d.content}`);
+      if(docs.length)parts.push(`Project docs:\n${docs.join('\n\n')}`);
+    }
+    result.projects.push({id,text:parts.join('\n\n')});
+  }
+  return result;
+}
+function looksLikeMessage(obj){return !!(obj&&(obj.role||obj.sender||obj.author||obj.text||obj.content||obj.message))}
+function normalizeRole(role){const value=String(typeof role==='object'?(role.role||role.name||''):role||'').toLowerCase();if(['assistant','claude','bot'].includes(value))return'assistant';if(['user','human'].includes(value))return'user';if(value==='system')return'system';if(value==='tool')return'tool';return value||'assistant'}
+function textValue(value){
+  if(value==null)return'';
+  if(typeof value==='string')return value;
+  if(typeof value==='number'||typeof value==='boolean')return String(value);
+  if(Array.isArray(value))return value.map(textValue).filter(Boolean).join('\n');
+  if(typeof value==='object'){
+    if(typeof value.text==='string')return value.text;
+    if(typeof value.content==='string')return value.content;
+    return JSON.stringify(value,null,2);
+  }
+  return String(value);
+}
+function timestampToIso(value){return typeof value==='number'?new Date(value*1000).toISOString():null}
+
+function updateStats(){
+  $('chatCount').textContent=state.conversations.length;
+  $('messageCount').textContent=state.conversations.reduce((n,c)=>n+c.messages.length,0);
+  $('memoryCount').textContent=state.memories.length+state.projects.length;
+}
+function renderList(){
+  const list=$('conversationList');
+  const q=state.query.toLowerCase();
+  const items=state.conversations.filter(c=>!q||`${c.title} ${c.summary} ${c.source}`.toLowerCase().includes(q));
+  list.innerHTML='';
+  if(!items.length){list.innerHTML=`<div class="status">${state.conversations.length?'No matching chats.':'No chats yet.'}</div>`;return}
+  for(const conv of items){
+    const button=document.createElement('button');
+    button.className='item'+(state.active&&state.active.source_id===conv.source_id?' active':'');
+    button.innerHTML=`<span class="item-title">${escapeHtml(conv.title)}</span><span class="item-meta">${conv.messages.length} messages · ${escapeHtml(formatDate(conv.updated_at)||conv.source_type)}</span>`;
+    button.onclick=()=>{state.active=conv;renderList();renderActive()};
+    list.append(button);
+  }
+}
+function renderActive(){
+  const conv=state.active;
+  $('emptyState').classList.toggle('hidden',!!conv);
+  $('stream').classList.toggle('hidden',!conv);
+  if(!conv){
+    $('activeTitle').textContent='Read-only export preview';
+    $('activeMeta').textContent='Import an export to inspect conversations locally.';
+    $('messages').innerHTML='';
+    return;
+  }
+  $('activeTitle').textContent=conv.title;
+  $('activeMeta').textContent=`${conv.messages.length} messages · ${formatDate(conv.updated_at)||conv.source_type}`;
+  const root=$('messages');
+  root.innerHTML='';
+  for(const msg of conv.messages)root.append(renderMessage(msg));
+  $('stream').scrollTop=0;
+}
+function renderMessage(msg){
+  const row=document.createElement('article');
+  row.className=`msg ${msg.role==='user'?'user':'assistant'}`;
+  const details=[];
+  if(msg.thinking)details.push(`<details><summary>Thought process</summary><div class="details-body">${escapeHtml(msg.thinking)}</div></details>`);
+  const traces=(msg.traces||[]).filter(t=>t.type!=='summary');
+  const summary=(msg.traces||[]).find(t=>t.type==='summary');
+  if(summary&&!msg.thinking)details.push(`<details><summary>Thinking summary</summary><div class="details-body">${escapeHtml(summary.text||'')}</div></details>`);
+  if(traces.length)details.push(renderTraces(traces));
+  row.innerHTML=`<div class="role">${escapeHtml(msg.role||'assistant')}</div>${details.length?`<div class="details">${details.join('')}</div>`:''}<div class="bubble">${escapeHtml(msg.text||'(no visible text)')}</div>`;
+  return row;
+}
+function renderTraces(traces){
+  const byId=new Map();
+  let html='<details><summary>Tool trace</summary>';
+  for(const trace of traces){
+    if(trace.type==='tool_use'){
+      byId.set(trace.id,trace);
+      html+=`<div class="tool-row"><div class="tool-name">${escapeHtml(trace.name||'tool')}</div><div class="tool-output">${escapeHtml(JSON.stringify(trace.input||{},null,2))}</div></div>`;
+    }else if(trace.type==='tool_result'){
+      const use=byId.get(trace.tool_use_id);
+      html+=`<div class="tool-row"><div class="tool-name">${escapeHtml((use&&use.name)||trace.name||'tool result')}${trace.is_error?' · error':''}</div><div class="tool-output">${escapeHtml(trace.content||'')}</div></div>`;
+    }
+  }
+  return html+'</details>';
+}
+function formatDate(value){if(!value)return'';const date=new Date(value);return Number.isNaN(date.getTime())?'':date.toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}
+
+$('fileInput').addEventListener('change',event=>{const file=event.target.files&&event.target.files[0];if(file)parseFile(file).catch(err=>status(err.message||'Failed to parse export.'))});
+$('searchInput').addEventListener('input',event=>{state.query=event.target.value;renderList()});
+for(const eventName of ['dragenter','dragover'])$('dropZone').addEventListener(eventName,event=>{event.preventDefault();$('dropZone').classList.add('drag')});
+for(const eventName of ['dragleave','drop'])$('dropZone').addEventListener(eventName,event=>{event.preventDefault();$('dropZone').classList.remove('drag')});
+$('dropZone').addEventListener('drop',event=>{const file=event.dataTransfer.files&&event.dataTransfer.files[0];if(file)parseFile(file).catch(err=>status(err.message||'Failed to parse export.'))});
+inferRepoLinks();
+</script>
+</body>
+</html>

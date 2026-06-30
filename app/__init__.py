@@ -1,0 +1,1 @@
+"""Private Claude chat application."""
