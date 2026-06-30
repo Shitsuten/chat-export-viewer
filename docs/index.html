@@ -7,107 +7,110 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23bd6244'/%3E%3Cpath d='M18 22h28v6H18zm0 12h20v6H18z' fill='%23fff8f1'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#f7f4ee;
-  --panel:#fffdf8;
-  --panel-soft:#efebe2;
-  --ink:#24211d;
-  --muted:#7c7469;
-  --line:#ded8cd;
-  --accent:#bd6244;
-  --accent-ink:#fff8f1;
-  --shadow:0 18px 54px rgba(42,35,26,.12),0 2px 10px rgba(42,35,26,.06);
-  --radius:18px;
+  --sidebar:#f3f3f0;
+  --main:#f9f9f7;
+  --surface:#fffefa;
+  --sunken:#ece9e3;
+  --ink:#1f1f1d;
+  --muted:#858078;
+  --faint:#aaa49c;
+  --line:rgba(31,31,29,.10);
+  --accent:#d97757;
+  --accent-ink:#fff8f4;
+  --shadow:0 8px 28px rgba(31,30,29,.10),0 1px 3px rgba(31,30,29,.06);
+  --radius:16px;
   color-scheme:light;
 }
 *{box-sizing:border-box}
 html,body{height:100%}
 body{
   margin:0;
-  background:
-    radial-gradient(circle at 18% 8%,rgba(189,98,68,.13),transparent 28%),
-    linear-gradient(135deg,#fbf8f1 0%,#f2eee6 46%,#ebe4d9 100%);
+  background:var(--sidebar);
   color:var(--ink);
   font:15px/1.55 ui-sans-serif,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif;
 }
 button,input{font:inherit}
 button{border:0;cursor:pointer}
-.app{height:100%;display:grid;grid-template-columns:minmax(280px,340px) 1fr;overflow:hidden}
+.app{height:100%;display:grid;grid-template-columns:minmax(280px,340px) 1fr;overflow:hidden;background:var(--sidebar)}
 .sidebar{
   min-width:0;
-  border-right:1px solid rgba(82,70,55,.14);
-  background:rgba(247,244,238,.78);
-  backdrop-filter:blur(18px);
+  background:var(--sidebar);
   display:flex;
   flex-direction:column;
-  padding:18px 14px;
-  gap:14px;
+  padding:10px 14px 20px;
+  gap:12px;
 }
-.brand{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 4px}
-.brand h1{margin:0;font:650 22px/1.1 ui-serif,Georgia,"Times New Roman",serif;letter-spacing:.01em}
-.privacy{font-size:12px;color:var(--muted);border:1px solid rgba(82,70,55,.12);border-radius:999px;padding:5px 9px;background:rgba(255,253,248,.58);white-space:nowrap}
+.brand{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 2px;min-height:42px}
+.brand h1{margin:0;font:500 23px/1.08 ui-serif,Georgia,"Times New Roman",serif;letter-spacing:0;color:var(--ink)}
+.privacy{font-size:12px;color:var(--muted);border-radius:999px;padding:5px 9px;background:rgba(31,31,29,.06);white-space:nowrap}
 .drop{
   position:relative;
   display:grid;
-  gap:10px;
-  padding:18px;
-  border:1px dashed rgba(189,98,68,.45);
-  border-radius:var(--radius);
-  background:rgba(255,253,248,.72);
-  box-shadow:0 1px 0 rgba(255,255,255,.8) inset;
+  gap:8px;
+  padding:12px;
+  border:1px dashed rgba(31,31,29,.14);
+  border-radius:14px;
+  background:rgba(255,255,255,.48);
 }
-.drop.drag{background:#fff7ef;border-color:var(--accent)}
-.drop strong{font-size:16px}
+.drop.drag{background:#fff7f0;border-color:var(--accent)}
+.drop strong{font-size:14px;font-weight:650}
 .drop span{color:var(--muted);font-size:13px}
 .file-row{display:flex;align-items:center;gap:10px}
-.file-button{width:max-content;border-radius:999px;background:var(--ink);color:#fff;padding:9px 13px;font-weight:650}
+.file-button{width:max-content;border-radius:999px;background:var(--ink);color:#fff;padding:7px 11px;font-size:13px;font-weight:650}
 #fileInput{position:absolute;inset:0;opacity:0;cursor:pointer}
-.status{min-height:22px;padding:0 4px;color:var(--muted);font-size:13px}
-.search{height:40px;display:flex;align-items:center;gap:9px;padding:0 12px;border:1px solid rgba(82,70,55,.12);border-radius:14px;background:rgba(255,253,248,.76)}
+.status{min-height:20px;padding:0 4px;color:var(--muted);font-size:13px}
+.search{height:38px;display:flex;align-items:center;gap:9px;padding:0 12px;border:0;border-radius:14px;background:rgba(31,31,29,.06)}
 .search svg{width:17px;height:17px;color:var(--muted)}
 .search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--ink)}
-.search input::placeholder{color:#9c9489}
+.search input::placeholder{color:var(--faint)}
+.nav{display:flex;flex-direction:column;gap:1px}
+.nav-item{height:42px;display:flex;align-items:center;gap:12px;padding:0 10px;border-radius:13px;color:var(--ink);font-size:16px}
+.nav-item:hover,.nav-item.active{background:rgba(31,31,29,.07)}
+.nav-icon{width:20px;height:20px;display:grid;place-items:center;color:var(--ink)}
+.nav-icon svg{width:20px;height:20px;stroke-width:1.8}
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.stat{padding:10px;border-radius:14px;background:rgba(255,253,248,.58);border:1px solid rgba(82,70,55,.08)}
-.stat b{display:block;font-size:18px;line-height:1.1}
+.stat{padding:9px 10px;border-radius:13px;background:rgba(255,255,255,.44)}
+.stat b{display:block;font-size:17px;line-height:1.1}
 .stat span{display:block;margin-top:4px;color:var(--muted);font-size:12px}
-.list{min-height:0;overflow:auto;padding-right:2px;display:flex;flex-direction:column;gap:6px}
+.list{min-height:0;overflow:auto;padding:4px 18px 10px 0;display:flex;flex-direction:column;gap:1px}
 .item{
   width:100%;
-  min-height:44px;
+  height:36px;
   display:block;
   text-align:left;
-  padding:9px 11px;
-  border-radius:14px;
+  padding:0 12px;
+  border-radius:18px;
   color:var(--ink);
   background:transparent;
 }
-.item:hover,.item.active{background:rgba(36,33,29,.07)}
-.item-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:560}
-.item-meta{display:block;margin-top:2px;color:var(--muted);font-size:12px}
-.main{min-width:0;height:100%;display:grid;grid-template-rows:auto 1fr auto;background:rgba(255,253,248,.44)}
+.item:hover,.item.active{background:rgba(31,31,29,.08)}
+.item-title{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;line-height:36px;font-weight:400}
+.item-meta{display:none}
+.main{min-width:0;height:100%;display:grid;grid-template-rows:72px 1fr auto;background:var(--main);border-top-left-radius:0}
 .top{
-  display:flex;
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
   align-items:center;
-  justify-content:space-between;
   gap:16px;
-  padding:18px 24px;
-  border-bottom:1px solid rgba(82,70,55,.12);
+  padding:14px 24px;
 }
-.title{min-width:0}
-.title h2{margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:650 20px/1.2 ui-serif,Georgia,"Times New Roman",serif}
-.title p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.title{min-width:0;text-align:center;grid-column:2}
+.title h2{margin:0;max-width:min(48vw,520px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 17px/1.2 ui-serif,Georgia,"Times New Roman",serif}
+.title p{margin:2px 0 0;color:var(--muted);font-size:13px}
 .download{
+  grid-column:3;
+  justify-self:end;
   flex:none;
   display:inline-flex;
   align-items:center;
   gap:8px;
   border-radius:999px;
-  background:var(--accent);
-  color:var(--accent-ink);
-  padding:10px 14px;
+  background:var(--surface);
+  color:var(--ink);
+  padding:9px 13px;
   text-decoration:none;
-  font-weight:700;
-  box-shadow:0 8px 20px rgba(189,98,68,.22);
+  font-weight:600;
+  box-shadow:0 1px 3px rgba(31,31,29,.10);
 }
 .download svg{width:17px;height:17px}
 .empty{
@@ -118,37 +121,38 @@ button{border:0;cursor:pointer}
 }
 .empty-card{
   width:min(680px,100%);
-  padding:28px;
-  border-radius:24px;
-  background:rgba(255,253,248,.72);
-  border:1px solid rgba(82,70,55,.12);
-  box-shadow:var(--shadow);
+  padding:0;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  text-align:center;
 }
-.empty-card h2{margin:0 0 8px;font:700 32px/1.05 ui-serif,Georgia,"Times New Roman",serif}
+.empty-card h2{margin:0 0 8px;font:400 34px/1.05 ui-serif,Georgia,"Times New Roman",serif}
 .empty-card p{margin:0;color:var(--muted)}
-.stream{min-height:0;overflow:auto;padding:24px}
-.messages{max-width:820px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+.stream{min-height:0;overflow:auto;padding:8px 24px 24px}
+.messages{max-width:780px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
 .msg{display:grid;gap:8px}
-.role{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.role{font-size:13px;color:var(--muted);letter-spacing:0;text-transform:none}
 .bubble{
-  width:fit-content;
-  max-width:min(720px,100%);
-  padding:13px 15px;
-  border-radius:18px;
+  width:auto;
+  max-width:100%;
+  padding:0;
+  border-radius:0;
   white-space:pre-wrap;
   overflow-wrap:anywhere;
-  background:var(--panel);
-  border:1px solid rgba(82,70,55,.10);
-  box-shadow:0 1px 0 rgba(255,255,255,.85) inset;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  font-size:16px;
 }
-.msg.user{align-items:end}
+.msg.user{justify-items:end}
 .msg.user .role{text-align:right}
-.msg.user .bubble{background:#e9dfd0;border-color:rgba(82,70,55,.08)}
+.msg.user .bubble{max-width:min(660px,88%);padding:10px 14px;border-radius:20px;background:var(--sunken)}
 .details{display:grid;gap:8px;max-width:min(720px,100%)}
 details{
-  border:1px solid rgba(82,70,55,.12);
+  border:1px solid var(--line);
   border-radius:14px;
-  background:rgba(255,253,248,.62);
+  background:rgba(255,255,255,.52);
   overflow:hidden;
 }
 summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
@@ -158,20 +162,20 @@ summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
 .tool-name{font-weight:700;color:#4b443b}
 .tool-output{margin-top:5px;color:var(--muted);white-space:pre-wrap;font-size:13px;max-height:190px;overflow:auto}
 .composer{
-  padding:16px 24px 20px;
-  background:linear-gradient(180deg,rgba(255,253,248,0),rgba(255,253,248,.86) 24%);
+  padding:16px 24px 22px;
+  background:linear-gradient(180deg,rgba(249,249,247,0),var(--main) 28%);
 }
 .composer-inner{
-  max-width:820px;
+  max-width:720px;
   margin:0 auto;
   display:flex;
   gap:10px;
   align-items:center;
-  padding:10px 12px;
-  border:1px solid rgba(82,70,55,.14);
-  border-radius:20px;
-  background:rgba(255,253,248,.86);
-  box-shadow:0 8px 30px rgba(42,35,26,.08);
+  padding:12px 12px;
+  border:1px solid #fff;
+  border-radius:18px;
+  background:var(--surface);
+  box-shadow:var(--shadow);
 }
 .composer input{
   flex:1;
@@ -192,9 +196,12 @@ summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
 .hidden{display:none!important}
 @media(max-width:820px){
   .app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
-  .sidebar{height:44dvh;border-right:0;border-bottom:1px solid rgba(82,70,55,.14)}
+  .sidebar{height:42dvh;border-right:0;border-bottom:1px solid var(--line)}
   .main{height:56dvh}
-  .top{padding:14px 16px}
+  .top{grid-template-columns:1fr auto;grid-template-rows:auto auto;padding:12px 16px}
+  .title{grid-column:1/3;grid-row:1;text-align:left}
+  .title h2{max-width:100%}
+  .download{grid-column:2;grid-row:2}
   .stream{padding:16px}
   .download span{display:none}
 }
@@ -204,20 +211,28 @@ summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <h1>Export Viewer</h1>
-      <div class="privacy">local only</div>
+      <h1>Claude</h1>
+      <div class="privacy">read-only</div>
     </div>
-    <label class="drop" id="dropZone">
-      <strong>Drop Claude / ChatGPT export zip</strong>
-      <span>Only read in this browser. Nothing is uploaded or stored.</span>
-      <span class="file-row"><span class="file-button">Choose file</span><span id="fileName">zip / json / jsonl / txt</span></span>
-      <input id="fileInput" type="file" accept=".zip,.json,.jsonl,.txt,.md,.markdown,application/zip,application/json">
-    </label>
-    <div class="status" id="status">Ready.</div>
     <label class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
       <input id="searchInput" placeholder="Search chats" autocomplete="off">
     </label>
+    <nav class="nav" aria-label="Claude navigation">
+      <button class="nav-item active" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg></span><span>Chats</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 7h7l2 2h9v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><span>Projects</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 12 4 7.5"/><path d="m12 12 8-4.5"/><path d="M12 12v9"/></svg></span><span>Artifacts</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 3h12v18l-6-4-6 4z"/></svg></span><span>Memory</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span><span>Import chats</span></button>
+      <button class="nav-item" type="button"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5z"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.87l-.06-.06A2 2 0 1 1 7.03 3.84l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2 2 0 1 1 4 0v.09A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.24.38.62.6 1 .6h.6a2 2 0 1 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"/></svg></span><span>External API</span></button>
+    </nav>
+    <label class="drop" id="dropZone">
+      <strong>Import chats</strong>
+      <span>Drop a Claude / ChatGPT export. Parsed locally in this browser.</span>
+      <span class="file-row"><span class="file-button">Choose export</span><span id="fileName">zip / json / jsonl / txt</span></span>
+      <input id="fileInput" type="file" accept=".zip,.json,.jsonl,.txt,.md,.markdown,application/zip,application/json">
+    </label>
+    <div class="status" id="status">Ready.</div>
     <div class="stats">
       <div class="stat"><b id="chatCount">0</b><span>chats</span></div>
       <div class="stat"><b id="messageCount">0</b><span>messages</span></div>
@@ -228,7 +243,7 @@ summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
   <main class="main">
     <header class="top">
       <div class="title">
-        <h2 id="activeTitle">Read-only export preview</h2>
+        <h2 id="activeTitle">Sonnet 4.6</h2>
         <p id="activeMeta">Import an export to inspect conversations locally.</p>
       </div>
       <a class="download" id="downloadLink" href="#" target="_blank" rel="noreferrer">
@@ -238,8 +253,8 @@ summary{padding:9px 12px;color:var(--muted);cursor:pointer;font-weight:620}
     </header>
     <section class="empty" id="emptyState">
       <div class="empty-card">
-        <h2>Preview exported chats without a server.</h2>
-        <p>Upload a Claude or ChatGPT export zip. This page parses the archive in memory, shows conversations, thinking summaries, tool traces, memories, and project prompts in read-only mode.</p>
+        <h2>What’s on your mind?</h2>
+        <p>Drop a Claude or ChatGPT export zip to preview conversations, thinking summaries, tool traces, memories, and projects. Files stay in this browser.</p>
       </div>
     </section>
     <section class="stream hidden" id="stream"><div class="messages" id="messages"></div></section>
@@ -575,7 +590,7 @@ function renderActive(){
   $('emptyState').classList.toggle('hidden',!!conv);
   $('stream').classList.toggle('hidden',!conv);
   if(!conv){
-    $('activeTitle').textContent='Read-only export preview';
+    $('activeTitle').textContent='Sonnet 4.6';
     $('activeMeta').textContent='Import an export to inspect conversations locally.';
     $('messages').innerHTML='';
     return;
