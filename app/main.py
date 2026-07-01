@@ -55,6 +55,9 @@ from app.store import (
     ensure_conversation,
     import_conversations,
     initialize_store,
+    prepare_edit_turn,
+    prepare_retry_turn,
+    restore_branch,
 )
 from app.uploads import (
     remove_conversation_uploads,
@@ -138,6 +141,8 @@ class ChatBody(BaseModel):
     message: str = Field(default="", max_length=20_000)
     conversation_id: str | None = Field(default=None, max_length=256)
     session_id: str | None = Field(default=None, max_length=256)
+    edit_message_id: int | None = Field(default=None, ge=1)
+    retry_message_id: int | None = Field(default=None, ge=1)
     model: str = Field(default="gpt-4.1-mini", max_length=128)
     effort: str = Field(default="medium", max_length=16)
     extended: bool = True
@@ -233,7 +238,12 @@ async def login(body: AuthBody) -> dict:
 
 @app.post("/api/chat", dependencies=[Depends(require_auth)])
 async def chat(body: ChatBody) -> StreamingResponse:
-    if not body.message.strip() and not body.attachments:
+    branch_mode = body.edit_message_id is not None or body.retry_message_id is not None
+    if body.edit_message_id is not None and body.retry_message_id is not None:
+        raise HTTPException(status_code=400, detail="不能同时编辑和重试")
+    if branch_mode and not (body.conversation_id or body.session_id):
+        raise HTTPException(status_code=400, detail="编辑或重试缺少会话标识")
+    if not branch_mode and not body.message.strip() and not body.attachments:
         raise HTTPException(status_code=400, detail="消息或附件不能为空")
     requested_conv_id = body.conversation_id or body.session_id
     if body.attachments and not requested_conv_id:
@@ -243,37 +253,82 @@ async def chat(body: ChatBody) -> StreamingResponse:
         if body.attachments and requested_conv_id
         else []
     )
-    return external_chat_stream(body, attachment_items)
+    return external_chat_stream(body, attachment_items, branch_mode=branch_mode)
 
 
 def external_chat_stream(
     body: ChatBody,
     attachment_items: list[dict[str, Any]] | None = None,
+    branch_mode: bool = False,
 ) -> StreamingResponse:
     async def sse():
         conv_id = None
         response_text = ""
+        branch_id = None
+        branch_committed = False
+        active_attachments = attachment_items or []
         try:
-            conv_id, _ = begin_turn(
-                body.message.strip(),
-                body.conversation_id,
-                body.session_id,
-                attachment_items or [],
+            if body.edit_message_id is not None:
+                branch = prepare_edit_turn(
+                    body.conversation_id or body.session_id or "",
+                    body.edit_message_id,
+                    body.message.strip(),
+                )
+                conv_id = branch["conv_id"]
+                branch_id = branch.get("branch_id")
+                active_attachments = branch.get("attachments") or []
+                user_message_id = branch["user_message_id"]
+            elif body.retry_message_id is not None:
+                branch = prepare_retry_turn(
+                    body.conversation_id or body.session_id or "",
+                    body.retry_message_id,
+                )
+                conv_id = branch["conv_id"]
+                branch_id = branch.get("branch_id")
+                active_attachments = branch.get("attachments") or []
+                user_message_id = branch["user_message_id"]
+            else:
+                conv_id, _, user_message_id = begin_turn(
+                    body.message.strip(),
+                    body.conversation_id,
+                    body.session_id,
+                    active_attachments,
+                )
+            yield sse_event(
+                "conversation",
+                {"conversation_id": conv_id, "user_message_id": user_message_id},
             )
-            yield sse_event("conversation", {"conversation_id": conv_id})
-            response_text = call_external_chat_api(conv_id, body, attachment_items or [])
+            response_text = call_external_chat_api(conv_id, body, active_attachments)
             for chunk in chunk_text(response_text):
                 yield sse_event("delta", {"text": chunk})
                 await asyncio.sleep(0)
             session_id = f"external-{uuid4()}"
-            complete_turn(conv_id, session_id, response_text, "", [])
-            yield sse_event("done", {"conversation_id": conv_id, "session_id": session_id})
+            assistant_message_id = complete_turn(conv_id, session_id, response_text, "", [])
+            branch_committed = True
+            yield sse_event(
+                "done",
+                {
+                    "conversation_id": conv_id,
+                    "session_id": session_id,
+                    "assistant_message_id": assistant_message_id,
+                },
+            )
         except ConversationNotFound:
+            if branch_mode and not branch_committed:
+                restore_branch(branch_id)
             yield sse_event("error", {"message": "会话不存在或已被删除"})
         except HTTPException as exc:
+            if branch_mode and not branch_committed:
+                restore_branch(branch_id)
             detail = exc.detail if isinstance(exc.detail, str) else json.dumps(exc.detail, ensure_ascii=False)
             yield sse_event("error", {"message": detail})
+        except ValueError as exc:
+            if branch_mode and not branch_committed:
+                restore_branch(branch_id)
+            yield sse_event("error", {"message": str(exc) or "请求无效"})
         except Exception:
+            if branch_mode and not branch_committed:
+                restore_branch(branch_id)
             logger.exception("external chat failed")
             yield sse_event("error", {"message": "外部 API 暂时没有响应，请检查 endpoint、key 和模型名。"})
 
