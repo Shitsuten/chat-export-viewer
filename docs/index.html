@@ -658,22 +658,36 @@ function setLayerState(element,open){element.classList.toggle('show',open);eleme
 function sheet(name,open){const s=$(`${name}Sheet`);if(open){s.classList.toggle('expanded',name==='model'&&_modelPage==='api');s.style.transform=''}setLayerState($(`${name}Overlay`),open);setLayerState(s,open)}
 $('topbarModelButton').onclick=()=>{_modelPage='main';renderModelSheet();sheet('model',true)};$('modelOverlay').onclick=()=>{_modelPage='main';sheet('model',false)};
 
-function _buildUserRow(text,timestamp='',attachments=[]){const row=document.createElement('div');row.className='msg-user';row.dataset.raw=text;row.dataset.timestamp=timestamp||'';
+function _buildUserRow(text,timestamp='',attachments=[],messageId=''){const row=document.createElement('div');row.className='msg-user';row.dataset.raw=text;row.dataset.timestamp=timestamp||'';if(messageId)row.dataset.msgId=messageId;
   const imgs=attachments.filter(a=>a.is_image);const files=attachments.filter(a=>!a.is_image);
   if(imgs.length){const wrap=document.createElement('div');wrap.className='user-images';imgs.forEach(a=>{const img=document.createElement('img');img.className='user-image';img.alt=a.name||'';if(a.preview){img.src=a.preview}else{img._lazyAtt=a;lazyImgObserver.observe(img)}wrap.append(img)});row.append(wrap)}
   const b=document.createElement('div');b.className='bubble';
   if(files.length){const fc=document.createElement('div');fc.className='message-attachments';files.forEach(item=>fc.append(attachmentCard(item)));b.append(fc)}
   if(text){const content=document.createElement('div');content.textContent=text;b.append(content);if(text.trim().length<=30){let _cpT=null;const _cpCancel=()=>{clearTimeout(_cpT);_cpT=null};b.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button!==0)return;_cpCancel();_cpT=setTimeout(()=>{try{navigator.clipboard?.writeText?.(text);toast?.('已复制')}catch(e){}_cpT=null},550)});b.addEventListener('pointerup',_cpCancel);b.addEventListener('pointercancel',_cpCancel);b.addEventListener('pointermove',()=>{if(_cpT)_cpCancel()})}}
   if(text||files.length)row.append(b);return row}
-function addUser(text,timestamp='',attachments=[]){const row=_buildUserRow(text,timestamp,attachments);streamInner.append(row);row.scrollIntoView({block:'end'});return row}
+function addUser(text,timestamp='',attachments=[],messageId=''){const row=_buildUserRow(text,timestamp,attachments,messageId);streamInner.append(row);row.scrollIntoView({block:'end'});return row}
 function plainConversation(){return[...streamInner.children].map(x=>x.classList.contains('msg-user')?`You: ${x.dataset.raw}`:x.classList.contains('msg-claude')?`Claude: ${x.dataset.raw||''}`:'').filter(Boolean).join('\n\n')}
-function actions(row,raw,userText,userAttachments=[]){const bar=document.createElement('div');bar.className='message-actions';const make=(name,title,fn)=>{const b=document.createElement('button');b.className='action-button';b.title=title;b.innerHTML=icon(name);b.onclick=e=>{e.stopPropagation();fn(b)};bar.append(b);return b};
+function actions(row,raw,userText,userAttachments=[]){if(row.querySelector('.message-actions'))return;const bar=document.createElement('div');bar.className='message-actions';const make=(name,title,fn)=>{const b=document.createElement('button');b.className='action-button';b.title=title;b.innerHTML=icon(name);b.onclick=e=>{e.stopPropagation();fn(b)};bar.append(b);return b};
   make('copy','复制',async b=>{await navigator.clipboard.writeText(raw);b.textContent='✓';setTimeout(()=>b.innerHTML=icon('copy'),1000)});
   make('share','分享',async()=>{await navigator.clipboard.writeText(location.href);toast('已复制链接')});
   make('play','朗读',b=>{if(speechSynthesis.speaking){speechSynthesis.cancel();b.classList.remove('active');b.innerHTML=icon('play')}else{const u=new SpeechSynthesisUtterance(raw);u.lang='zh-CN';u.onend=()=>{b.classList.remove('active');b.innerHTML=icon('play')};speechSynthesis.speak(u);b.classList.add('active');b.innerHTML=icon('stop')}});
   const voteKey=`vote:${state.convId||'new'}:${raw.slice(0,40)}`;['up','down'].forEach(v=>{const b=make(v,v==='up'?'点赞':'点踩',btn=>{const next=localStorage.getItem(voteKey)===v?'':v;localStorage.setItem(voteKey,next);bar.querySelectorAll('[data-vote]').forEach(x=>x.classList.toggle('active',x.dataset.vote===next))});b.dataset.vote=v;b.classList.toggle('active',localStorage.getItem(voteKey)===v)});
-  make('retry','重新生成',()=>{if(document.body.classList.contains('pages-browser')&&typeof window.browserRetryAssistant==='function')window.browserRetryAssistant(row,userText,userAttachments);else{row.remove();sendMessage(userText,false,[],userAttachments)}});
+  make('retry','重新生成',()=>{if(document.body.classList.contains('pages-browser')&&typeof window.browserRetryAssistant==='function')window.browserRetryAssistant(row,userText,userAttachments);else retryAssistant(row,userText,userAttachments)});
   row.append(bar)}
+function messageId(row){const id=parseInt(row?.dataset?.msgId||'',10);return Number.isFinite(id)?id:null}
+function removeRowsAfter(row,{includeSelf=false}={}){
+  if(!row)return;
+  document.querySelector('.stream-disclaimer')?.remove();
+  let n=includeSelf?row:row.nextSibling;
+  while(n){const next=n.nextSibling;n.remove();n=next}
+}
+function retryAssistant(row,userText,userAttachments=[]){
+  if(state.busy){toast('请等待当前回复完成');return}
+  const id=messageId(row);
+  if(!id){toast('这条消息要先重新打开会话才可重试');return}
+  removeRowsAfter(row,{includeSelf:true});
+  sendMessage(userText,false,[],userAttachments,{retryMessageId:id});
+}
 function thoughtPreview(thinking){const text=(thinking||'').replace(/\s+/g,' ').trim(),first=(text.match(/^[^。！？.!?]+[。！？.!?]?/)||[text])[0].trim();return first.length>30?`${first.slice(0,30)}…`:first}
 function dedupeSummaryText(text){let s=(text||'').replace(/\s+/g,' ').trim();if(!s)return'';const tail=(s.match(/(?:…|\.{3,}|。)+$/)||[''])[0];const body=tail?s.slice(0,-tail.length).trim():s;for(let len=4;len<=Math.floor(body.length/2);len++){const unit=body.slice(0,len);if(!unit.trim())continue;let pos=0,count=0;while(body.slice(pos,pos+len)===unit){pos+=len;count++}const rest=body.slice(pos);if(count>=2&&(!rest||unit.startsWith(rest)))return unit.trim()}return s}
 function thoughtSummaryHtml(thinking){return `<svg class="thinking-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4a8 8 0 1 1-8 8"/><path d="M12 7.5v5l3.2 1.9"/><circle cx="4.2" cy="8.1" r="0.8" fill="currentColor" stroke="none"/><circle cx="5.6" cy="5.5" r="0.8" fill="currentColor" stroke="none"/><circle cx="8.1" cy="3.9" r="0.8" fill="currentColor" stroke="none"/></svg><span class="thinking-summary-text"></span><span class="thinking-summary-spacer"></span><svg class="thinking-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>`}
@@ -1264,8 +1278,8 @@ function _groupToolTracesByTextOffset(toolTraces,text){
   });
   return [...groups.entries()].sort((a,b)=>a[0]-b[0]);
 }
-function _buildClaudeRow(text,userText='',thinking='',timestamp='',userAttachments=[],traces=[]){
-  const row=document.createElement('div');row.className='msg-claude';row.dataset.raw=text;row.dataset.timestamp=timestamp||'';
+function _buildClaudeRow(text,userText='',thinking='',timestamp='',userAttachments=[],traces=[],messageId=''){
+  const row=document.createElement('div');row.className='msg-claude';row.dataset.raw=text;row.dataset.timestamp=timestamp||'';if(messageId)row.dataset.msgId=messageId;
   traces=Array.isArray(traces)?traces:[];
   const sumEntry=traces.find(t=>t.type==='summary'),toolTraces=traces.filter(t=>t.type!=='summary');
   const positioned=toolTraces.some(t=>Number.isFinite(Number(t.text_offset)));
@@ -1294,7 +1308,7 @@ function _buildClaudeRow(text,userText='',thinking='',timestamp='',userAttachmen
   }
   actions(row,text,userText,userAttachments);return row
 }
-function addClaude(text,userText='',thinking='',timestamp='',userAttachments=[]){const row=_buildClaudeRow(text,userText,thinking,timestamp,userAttachments);streamInner.append(row);appendDisclaimer();return row}
+function addClaude(text,userText='',thinking='',timestamp='',userAttachments=[],messageId=''){const row=_buildClaudeRow(text,userText,thinking,timestamp,userAttachments,[],messageId);streamInner.append(row);appendDisclaimer();return row}
 function beginClaude(userText,userAttachments=[]){document.querySelector('.stream-disclaimer')?.remove();
   // === DOM 结构(顺序固定):status, summary, md, trailLogo ===
   // trailLogo 永远在 row 末尾 → 它自然出现在"最后一段内容下面一行"
@@ -1452,21 +1466,24 @@ initSheetDrag($('thoughtSheet'),'#closeThought,#closeThoughtRight',()=>{delete $
 initSheetDrag($('modelSheet'),'#closeModel',()=>{_modelPage='main'});
 async function recoverAfterBreak(msg,convId,failText){if(!msg)return;if(!convId){msg.fail(failText);return}await new Promise(r=>setTimeout(r,1500));try{const r=await api(`/api/sessions/${encodeURIComponent(convId)}/messages`);if(!r.ok)throw 0;const data=await r.json();const list=data.messages||[];const last=[...list].reverse().find(m=>m.role==='assistant');if(!last||!(last.text||'').trim())throw 0;if(last.thinking)msg.thinking(last.thinking);msg.text(last.text);msg.finish()}catch{msg.fail(failText)}}
 
-async function sendMessage(text,showUser=true,files=[],existingAttachments=[]){
+async function sendMessage(text,showUser=true,files=[],existingAttachments=[],options={}){
   if((!text&&!files.length&&!existingAttachments.length)||state.busy)return;
-  state.busy=true;updateSendButton();let msg;
+  state.busy=true;updateSendButton();let msg,userRow=options.userRow||null;
   try{
-    const attachments=existingAttachments.length?existingAttachments:await uploadPendingFiles(files);
+    const branchMode=!!options.retryMessageId;
+    const attachments=branchMode?(existingAttachments||[]):(existingAttachments.length?existingAttachments:await uploadPendingFiles(files));
     if(showUser){
-      await dismissEmpty();addUser(text,'',attachments);
+      await dismissEmpty();userRow=addUser(text,'',attachments);
       if(state.currentTitle==='新对话'){state.currentTitle=(text||attachments[0]?.name||'附件').slice(0,40);updateSessionHeader()}
       input.value='';input.style.height='auto';clearPendingFiles();
     }
     msg=beginClaude(text,attachments);const m=currentModel(),s=modelSetting(m);
-    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify({message:text,conversation_id:state.convId,session_id:state.legacySessionId,model:state.model,effort:s.effort||'medium',extended:s.extended!==false,attachments:attachments.map(item=>item.path),...externalPayload()})});
+    const body={message:text,conversation_id:state.convId,session_id:state.legacySessionId,model:state.model,effort:s.effort||'medium',extended:s.extended!==false,attachments:branchMode?[]:attachments.map(item=>item.path),...externalPayload()};
+    if(options.retryMessageId)body.retry_message_id=options.retryMessageId;
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${state.token}`},body:JSON.stringify(body)});
     if(r.status===401){showGate();throw Error('登录已失效')}if(!r.ok||!r.body){const detail=await r.json().catch(()=>({}));throw Error(detail.detail||'请求失败')}
     const reader=r.body.getReader(),decoder=new TextDecoder();let buffer='',finished=false;
-    const frame=f=>{let event='',data='';f.split('\n').forEach(line=>{if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data+=line.slice(5).trim()});if(!event||!data)return;const d=JSON.parse(data);if(event==='conversation'){state.convId=d.conversation_id;state.legacySessionId=null;localStorage.setItem('chat_conversation',state.convId);localStorage.removeItem('chat_session')}if(event==='thinking')msg.thinking(d.text||'');if(event==='delta')msg.text(d.text||'');if(event==='tool_use')msg.toolUse(d);if(event==='tool_result')msg.toolResult(d);if(event==='trace_summary')msg.traceSummary(d.text||'');if(event==='done'){state.convId=d.conversation_id||state.convId;localStorage.setItem('chat_conversation',state.convId);msg.finish();finished=true}if(event==='error'){msg.fail(d.message);finished=true}};
+    const frame=f=>{let event='',data='';f.split('\n').forEach(line=>{if(line.startsWith('event:'))event=line.slice(6).trim();if(line.startsWith('data:'))data+=line.slice(5).trim()});if(!event||!data)return;const d=JSON.parse(data);if(event==='conversation'){state.convId=d.conversation_id;state.legacySessionId=null;localStorage.setItem('chat_conversation',state.convId);localStorage.removeItem('chat_session');if(d.user_message_id&&userRow)userRow.dataset.msgId=d.user_message_id}if(event==='thinking')msg.thinking(d.text||'');if(event==='delta')msg.text(d.text||'');if(event==='tool_use')msg.toolUse(d);if(event==='tool_result')msg.toolResult(d);if(event==='trace_summary')msg.traceSummary(d.text||'');if(event==='done'){state.convId=d.conversation_id||state.convId;localStorage.setItem('chat_conversation',state.convId);msg.finish();if(d.assistant_message_id&&msg?.row)msg.row.dataset.msgId=d.assistant_message_id;finished=true}if(event==='error'){msg.fail(d.message);finished=true}};
     while(true){const{value,done}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});const parts=buffer.split(/\r?\n\r?\n/);buffer=parts.pop()||'';parts.forEach(frame);if(done)break}
     if(buffer.trim())frame(buffer);if(!finished)await recoverAfterBreak(msg,state.convId,'连接意外结束，请重试。')
   }catch(e){if(msg)await recoverAfterBreak(msg,state.convId,e.message||'连接失败，请稍后重试。');else toast(e.message||'文件上传失败')}
@@ -1678,8 +1695,8 @@ function _renderMessagesIntoFragment(slice){
   const frag=document.createDocumentFragment();
   slice.forEach(m=>{
     const row=m.role==='user'
-      ?_buildUserRow(m.text,m.timestamp,m._la||[])
-      :_buildClaudeRow(m.text,m._lu||'',m.thinking,m.timestamp,m._la||[],m.traces||[]);
+      ?_buildUserRow(m.text,m.timestamp,m._la||[],m.id)
+      :_buildClaudeRow(m.text,m._lu||'',m.thinking,m.timestamp,m._la||[],m.traces||[],m.id);
     frag.appendChild(row);
   });
   return frag;
