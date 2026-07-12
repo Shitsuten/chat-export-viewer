@@ -377,7 +377,8 @@ body.sidebar-action-open .rename-dialog input{-webkit-user-select:text;user-sele
       <select id="externalProvider">
         <option value="openai-compatible">OpenAI-compatible</option>
         <option value="anthropic">Anthropic</option>
-        <option value="collapse5am">Collapse5am</option>
+        <option value="collapse5am-local">Collapse5am · Local</option>
+        <option value="collapse5am">Collapse5am · Cloud</option>
       </select>
     </div>
     <div class="external-field">
@@ -1799,7 +1800,11 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
   const jsonResponse=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
   const dbName='chat-export-viewer-pages';
   const storeName='snapshots';
-  const collapse5amPreset={endpoint:'https://satyricon.uk/collapse/v1',model:'Collapse5am'};
+  const collapse5amPresets={
+    'collapse5am-local':{endpoint:'http://127.0.0.1:9000/v1',model:'Collapse5am · Local'},
+    collapse5am:{endpoint:'https://satyricon.uk/collapse/v1',model:'Collapse5am · Cloud'}
+  };
+  const collapse5amCloudTokenKey='collapse5am_cloud_access_token';
 
   function openPageDb(){return new Promise((resolve,reject)=>{const request=indexedDB.open(dbName,1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains(storeName))request.result.createObjectStore(storeName)};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
   async function savePageStore(){try{const db=await openPageDb();const snapshot={conversations:pageStore.conversations,memories:pageStore.memories,projects:pageStore.projects,preferences:pageStore.preferences,users:pageStore.users,profile:pageStore.profile,activeId:pageStore.active?.conv_id||null};await new Promise((resolve,reject)=>{const tx=db.transaction(storeName,'readwrite');tx.objectStore(storeName).put(snapshot,'current');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(error){console.warn('Unable to persist browser data',error)}}
@@ -1825,23 +1830,44 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
 
   function syncBrowserModel(){
     normalizeExternal();
-    const fallback=state.external.provider==='anthropic'?'claude-sonnet-4-20250514':state.external.provider==='collapse5am'?collapse5amPreset.model:'gpt-4.1-mini';
-    const model=state.external.model||fallback;
+    const preset=collapse5amPresets[state.external.provider];
+    const fallback=state.external.provider==='anthropic'?'claude-sonnet-4-20250514':preset?.model||'gpt-4.1-mini';
+    const model=preset&&(!state.external.model||state.external.model==='Collapse5am')?preset.model:state.external.model||fallback;
+    if(preset)state.external.model=model;
     state.model=model;
-    const desc=state.external.provider==='anthropic'?'Anthropic API':state.external.provider==='collapse5am'?'Private Tinker checkpoint':'OpenAI-compatible API';
+    const desc=state.external.provider==='anthropic'?'Anthropic API':state.external.provider==='collapse5am'?'Tinker cloud checkpoint':state.external.provider==='collapse5am-local'?'On-device MLX model':'OpenAI-compatible API';
     state.models=[{id:model,label:model,desc,thinking:'none',primary:true}];
     localStorage.setItem('chat_model',model);
   }
 
-  function renderBrowserProviderFields(){
-    const provider=byId('externalProvider').value,isCollapse=provider==='collapse5am';
-    if(isCollapse){
-      byId('externalEndpoint').value=collapse5amPreset.endpoint;
-      byId('externalModel').value=collapse5amPreset.model;
+  function rememberCollapseCloudToken(value){
+    const token=String(value||'').trim();
+    if(token&&token!=='local')localStorage.setItem(collapse5amCloudTokenKey,token);
+  }
+
+  function renderBrowserProviderFields(previousProvider=''){
+    const providerField=byId('externalProvider'),endpointField=byId('externalEndpoint'),modelField=byId('externalModel'),keyField=byId('externalApiKey');
+    const provider=providerField.value,preset=collapse5amPresets[provider],wasPreset=!!collapse5amPresets[previousProvider];
+    if(previousProvider==='collapse5am')rememberCollapseCloudToken(keyField.value);
+    if(preset){
+      endpointField.value=preset.endpoint;
+      modelField.value=preset.model;
+    }else if(wasPreset){
+      endpointField.value='';modelField.value='';keyField.value='';
     }
-    byId('externalEndpoint').readOnly=isCollapse;
-    byId('externalModel').readOnly=isCollapse;
-    byId('externalApiKey').placeholder=isCollapse?'Collapse5am access token':provider==='anthropic'?'sk-ant-...':'sk-...';
+    endpointField.readOnly=!!preset;
+    modelField.readOnly=!!preset;
+    if(provider==='collapse5am-local'){
+      keyField.value='local';keyField.readOnly=true;keyField.placeholder='No API key needed';
+    }else{
+      keyField.readOnly=false;
+      if(provider==='collapse5am'){
+        if(keyField.value==='local'||previousProvider&&previousProvider!=='collapse5am')keyField.value=localStorage.getItem(collapse5amCloudTokenKey)||'';
+        rememberCollapseCloudToken(keyField.value);
+      }
+      keyField.placeholder=provider==='collapse5am'?'Collapse5am cloud access token':provider==='anthropic'?'sk-ant-...':'sk-...';
+    }
+    providerField.dataset.previousProvider=provider;
   }
 
   function setupBrowserComposer(){
@@ -1867,8 +1893,8 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     byId('openMemory').onclick=()=>openBrowserMemory();
     byId('openExternalApi').onclick=()=>{closeDrawer();state.external.enabled=true;renderExternalPanel();renderBrowserProviderFields();byId('externalApiPanel').classList.add('show');byId('externalApiPanel').setAttribute('aria-hidden','false')};
     byId('externalEnabled').onclick=()=>{state.external.enabled=true;renderExternalPanel();toast('GitHub Pages 始终使用浏览器直连')};
-    byId('externalProvider').onchange=()=>{const wasCollapse=byId('externalEndpoint').readOnly;if(wasCollapse&&byId('externalProvider').value!=='collapse5am'){byId('externalEndpoint').value='';byId('externalModel').value=''}renderBrowserProviderFields()};
-    byId('saveExternalApi').onclick=()=>{state.external.enabled=true;state.external.provider=byId('externalProvider').value;state.external.endpoint=byId('externalEndpoint').value.trim();state.external.model=byId('externalModel').value.trim();state.external.apiKey=byId('externalApiKey').value.trim();state.external.systemPrompt=byId('externalSystemPrompt').value;state.external.temperature=Number(byId('externalTemperature').value||0.7);state.external.maxTokens=Number(byId('externalMaxTokens').value||2048);saveExternal();syncBrowserModel();renderModelSheet();updateModelHeader();toast('External API saved');byId('externalApiPanel').classList.remove('show');byId('externalApiPanel').setAttribute('aria-hidden','true')};
+    byId('externalProvider').onchange=()=>renderBrowserProviderFields(byId('externalProvider').dataset.previousProvider||state.external.provider);
+    byId('saveExternalApi').onclick=()=>{state.external.enabled=true;state.external.provider=byId('externalProvider').value;state.external.endpoint=byId('externalEndpoint').value.trim();state.external.model=byId('externalModel').value.trim();state.external.apiKey=byId('externalApiKey').value.trim();if(state.external.provider==='collapse5am')rememberCollapseCloudToken(state.external.apiKey);state.external.systemPrompt=byId('externalSystemPrompt').value;state.external.temperature=Number(byId('externalTemperature').value||0.7);state.external.maxTokens=Number(byId('externalMaxTokens').value||2048);saveExternal();syncBrowserModel();renderModelSheet();updateModelHeader();toast('External API saved');byId('externalApiPanel').classList.remove('show');byId('externalApiPanel').setAttribute('aria-hidden','true')};
   }
 
   function setBrowserEmpty(){
@@ -2049,8 +2075,8 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     }else{
       headers.Authorization=`Bearer ${key}`;body={model,messages,max_tokens:state.external.maxTokens||2048,temperature:state.external.temperature??0.7,stream:true};if(system)body.messages=[{role:'system',content:system},...messages];
     }
-    let response;try{response=await fetch(providerUrl(provider,state.external.endpoint),{method:'POST',headers,body:JSON.stringify(body)})}catch(error){throw new Error('浏览器无法连接 Provider。请检查 endpoint 和 CORS 设置')}
-    if(!response.ok){const detail=await response.text().catch(()=>'');const providerName=state.external.provider==='collapse5am'?'Collapse5am':provider==='anthropic'?'Anthropic':'OpenAI-compatible';throw new Error(`${providerName} 请求失败 (${response.status})${detail?`: ${detail.slice(0,240)}`:''}`)}
+    let response;try{response=await fetch(providerUrl(provider,state.external.endpoint),{method:'POST',headers,body:JSON.stringify(body)})}catch(error){if(state.external.provider==='collapse5am-local')throw new Error('本地 Collapse5am 没有启动。请在 Mac 运行：launchctl load ~/Library/LaunchAgents/com.collapse5am.server.plist');throw new Error('浏览器无法连接 Provider。请检查 endpoint 和 CORS 设置')}
+    if(!response.ok){const detail=await response.text().catch(()=>'');const providerName=state.external.provider==='collapse5am'?'Collapse5am Cloud':state.external.provider==='collapse5am-local'?'Collapse5am Local':provider==='anthropic'?'Anthropic':'OpenAI-compatible';throw new Error(`${providerName} 请求失败 (${response.status})${detail?`: ${detail.slice(0,240)}`:''}`)}
     return readProviderStream(response,provider,onDelta);
   }
 
