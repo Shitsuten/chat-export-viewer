@@ -139,6 +139,7 @@ button{font:inherit;border:0;background:none;color:inherit;cursor:pointer}textar
 .clawd-zzz svg{width:100%;height:100%;display:block;image-rendering:pixelated}
 .message-actions{display:flex;align-items:center;gap:12px;margin-top:var(--space-3);color:var(--text-secondary)}.action-button{width:20px;height:34px;display:grid;place-items:center;border-radius:var(--radius-full)}.action-button:active,.action-button.active{color:var(--accent)}
 .response-versions{display:inline-flex;align-items:center;gap:2px;height:34px;margin-right:2px;color:var(--text-secondary);font-family:var(--font-sans);font-size:13px;line-height:1;white-space:nowrap}.response-version-button{width:24px;height:28px;display:grid;place-items:center;border-radius:var(--radius-full);color:inherit;font-family:var(--font-sans);font-size:22px;font-weight:300;line-height:1}.response-version-button:not(:disabled):hover{background:var(--bg-sunken);color:var(--text-primary)}.response-version-button:disabled{opacity:.25;cursor:default}.response-version-count{min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.msg-user>.response-versions{flex-basis:100%;justify-content:flex-end;height:28px;margin:2px 9px 0 0}
 .composer-wrap{position:relative;flex:none;padding:var(--space-2) var(--page-pad) calc(env(safe-area-inset-bottom) + var(--space-2));background:var(--bg-primary)}
 #scrollToBottom{position:absolute;left:50%;top:0;transform:translate(-50%,calc(-100% - 8px));width:36px;height:36px;display:grid;place-items:center;background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius-full);box-shadow:var(--shadow-soft);opacity:1;transition:opacity .2s,transform .2s;z-index:5}
 #scrollToBottom.hidden{display:grid !important;opacity:0;transform:translate(-50%,calc(-100% + 4px));pointer-events:none}
@@ -2093,21 +2094,23 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     Object.assign(message,assistantVariant(selected),{variants,variantIndex:next});
     return next;
   }
-  function bindBrowserAssistantRow(row,message,conv){
+  function bindBrowserAssistantRow(row,message,conv,userRow=null){
     if(!row||!message)return;
-    row._browserMessage=message;row._browserConversation=conv;
+    row._browserMessage=message;row._browserConversation=conv;row._browserUserRow=userRow;
     row.querySelector(':scope > .response-versions')?.remove();
+    userRow?.querySelector(':scope > .response-versions')?.remove();
     const variants=assistantVariants(message);if(variants.length<2)return;
     const selected=activateAssistantVariant(message,Number.isInteger(message.variantIndex)?message.variantIndex:variants.length-1);
     const nav=document.createElement('span');nav.className='response-versions';nav.setAttribute('aria-label','生成版本');
-    const button=(label,title,disabled,go)=>{const b=document.createElement('button');b.type='button';b.className='response-version-button';b.textContent=label;b.title=title;b.disabled=disabled;b.onclick=async e=>{e.stopPropagation();activateAssistantVariant(message,go);await savePageStore();const replacement=_buildClaudeRow(message.text,message._lu||'',message.thinking,message.timestamp,message._la||[],message.traces||[]);row.replaceWith(replacement);bindBrowserAssistantRow(replacement,message,conv)};return b};
+    const button=(label,title,disabled,go)=>{const b=document.createElement('button');b.type='button';b.className='response-version-button';b.textContent=label;b.title=title;b.disabled=disabled;b.onclick=async e=>{e.stopPropagation();activateAssistantVariant(message,go);await savePageStore();const replacement=_buildClaudeRow(message.text,message._lu||'',message.thinking,message.timestamp,message._la||[],message.traces||[]);row.replaceWith(replacement);bindBrowserAssistantRow(replacement,message,conv,userRow)};return b};
     const count=document.createElement('span');count.className='response-version-count';count.textContent=`${selected+1} / ${variants.length}`;
     nav.append(button('‹','上一版',selected===0,selected-1),count,button('›','下一版',selected===variants.length-1,selected+1));
-    const bar=row.querySelector(':scope > .message-actions');if(bar)bar.prepend(nav);else row.append(nav);
+    if(userRow)userRow.append(nav);else row.append(nav);
   }
   function bindBrowserAssistantRows(conv){
-    const messages=conv.messages.filter(message=>message.role==='assistant'),rows=[...streamInner.querySelectorAll(':scope > .msg-claude')];
-    rows.forEach((row,index)=>bindBrowserAssistantRow(row,messages[index],conv));
+    const userRows=[...streamInner.querySelectorAll(':scope > .msg-user')],assistantRows=[...streamInner.querySelectorAll(':scope > .msg-claude')];
+    let userIndex=-1,assistantIndex=-1,currentUserRow=null;
+    conv.messages.forEach(message=>{if(message.role==='user')currentUserRow=userRows[++userIndex]||currentUserRow;else if(message.role==='assistant')bindBrowserAssistantRow(assistantRows[++assistantIndex],message,conv,currentUserRow)});
   }
   function providerUrl(provider,endpoint){const base=(endpoint||(provider==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')).replace(/\/$/,'');if(provider==='anthropic')return /\/v1\/messages$/.test(base)?base:`${base}/v1/messages`;return /\/chat\/completions$/.test(base)?base:`${base}/chat/completions`}
   async function readProviderStream(response,provider,onDelta){
@@ -2147,9 +2150,9 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
       msg=beginClaude(text,[]);let full='';const providerConv=retryMessage?{...conv,messages:conv.messages.slice(0,retryIndex)}:conv;await callBrowserProvider(providerConv,delta=>{full+=delta;msg.text(delta)});if(!full.trim())throw new Error('Provider 没有返回文本');
       const fresh={id:`browser-${Date.now()}-a`,role:'assistant',text:full,timestamp:new Date().toISOString(),thinking:'',attachments:[],traces:[]};
       if(retryMessage){const variants=assistantVariants(retryMessage);variants.push(assistantVariant(fresh));fresh.variants=variants;fresh.variantIndex=variants.length-1;conv.messages[retryIndex]=fresh}else conv.messages.push(fresh);
-      conv.updated_at=new Date().toISOString();msg.finish();bindBrowserAssistantRow(msg.row,fresh,conv);await savePageStore();await loadSessions();
+      conv.updated_at=new Date().toISOString();msg.finish();bindBrowserAssistantRow(msg.row,fresh,conv,retryRow?._browserUserRow||[...streamInner.querySelectorAll(':scope > .msg-user')].at(-1));await savePageStore();await loadSessions();
     }catch(error){
-      if(retryMessage&&conv&&retryIndex>=0){msg?.row.remove();const restored=_buildClaudeRow(retryMessage.text,retryMessage._lu||text,retryMessage.thinking,retryMessage.timestamp,retryMessage._la||existingAttachments,retryMessage.traces||[]),disclaimer=document.querySelector('.stream-disclaimer');if(disclaimer)disclaimer.before(restored);else streamInner.append(restored);bindBrowserAssistantRow(restored,retryMessage,conv);toast(error.message||'连接失败')}
+      if(retryMessage&&conv&&retryIndex>=0){msg?.row.remove();const restored=_buildClaudeRow(retryMessage.text,retryMessage._lu||text,retryMessage.thinking,retryMessage.timestamp,retryMessage._la||existingAttachments,retryMessage.traces||[]),disclaimer=document.querySelector('.stream-disclaimer');if(disclaimer)disclaimer.before(restored);else streamInner.append(restored);bindBrowserAssistantRow(restored,retryMessage,conv,retryRow?._browserUserRow||null);toast(error.message||'连接失败')}
       else if(msg)msg.fail(error.message||'连接失败');else toast(error.message||'连接失败')
     }
     finally{state.busy=false;updateSendButton()}
