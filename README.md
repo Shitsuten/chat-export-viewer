@@ -131,7 +131,7 @@ bash run.sh
 - 会话、memories、projects 和 Profile 保存在当前浏览器的 IndexedDB
 - 支持预览 conversations、design chats、thinking、tool traces、memories、projects
 - 可在 `External API` 中配置 OpenAI-compatible 或 Anthropic Provider，并从浏览器直接续聊
-- 内置 `Collapse5am` Provider 预设；选择后只需填写私有 access token
+- 内置 `Collapse5am · Local` 与 `Collapse5am · Cloud` 两个预设：Mac 醒着时可免费本地推理，Cloud 入口则使用私有 access token
 - API key 保存在当前浏览器的 localStorage，适合个人设备上的调试
 
 浏览器直连受 Provider 的 CORS 策略约束。新附件上传、服务端工具调用和服务器环境变量仍只在 FastAPI 部署版中提供。
