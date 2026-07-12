@@ -14,7 +14,7 @@
 - Claude / ChatGPT export 导入与归档浏览
 - 导入 Claude export zip 时自动同步 conversations、design chats、memories、project memories、thinking summaries、tool traces
 - OpenAI-compatible / Anthropic 外部 API 续聊
-- GitHub Pages 只读展示页：浏览器本地解析 export zip，不上传、不保存、不接 API
+- GitHub Pages 浏览器版：本地解析 export zip、IndexedDB 保存会话，并可直连 OpenAI-compatible / Anthropic API 续聊
 - Clawd 彩蛋（0.1% 概率出现像素螃蟹动画）
 
 ## 环境要求
@@ -116,7 +116,7 @@ bash run.sh
 - thinking summaries 优先使用导出中自带 summary
 - tool_use / tool_result 写入工具 trace
 
-## GitHub Pages 只读展示页
+## GitHub Pages 浏览器版
 
 `docs/index.html` 是一个纯静态 demo，可以直接用 GitHub Pages 发布：
 
@@ -125,14 +125,15 @@ bash run.sh
 3. Branch 选 `main`，目录选 `/docs`
 4. 访问 `https://你的用户名.github.io/仓库名/`
 
-这个展示页只在浏览器内读取用户选择的 zip / json 文件：
+这个版本只在浏览器内读取用户选择的 zip / json 文件：
 
 - 不上传文件
-- 不保存到服务器
-- 不接入外部 API
+- 会话、memories、projects 和 Profile 保存在当前浏览器的 IndexedDB
 - 支持预览 conversations、design chats、thinking、tool traces、memories、projects
+- 可在 `External API` 中配置 OpenAI-compatible 或 Anthropic Provider，并从浏览器直接续聊
+- API key 保存在当前浏览器的 localStorage，适合个人设备上的调试
 
-展示页底部输入框会提示：部署本项目即可接入自己的 API 继续聊天。真正的续聊、API key、本地数据库和附件管理都在 FastAPI 部署版里完成。
+浏览器直连受 Provider 的 CORS 策略约束。新附件上传、服务端工具调用和服务器环境变量仍只在 FastAPI 部署版中提供。
 
 ## 项目结构
 
@@ -148,7 +149,7 @@ static/
   index.html       前端（单文件 SPA）
   design-system.css
 docs/
-  index.html       GitHub Pages 只读 export viewer
+  index.html       GitHub Pages 浏览器直连版
 ```
 
 ## 致谢

@@ -367,8 +367,8 @@ body.sidebar-action-open .rename-dialog input{-webkit-user-select:text;user-sele
     </header>
     <div class="external-toggle">
       <div>
-        <div>Use browser API settings</div>
-        <div class="external-note">关闭时使用服务器环境变量里的默认 API 配置。</div>
+        <div>Browser direct connection</div>
+        <div class="external-note">请求会从当前浏览器直接发送给你配置的 Provider。</div>
       </div>
       <button class="external-switch" id="externalEnabled" type="button" aria-pressed="false"></button>
     </div>
@@ -1785,120 +1785,122 @@ addEventListener('pagehide',closeSessionContextMenu);
 if(state.token)showChat();updateSessionHeader();updateSendButton();
 </script>
 <style>
-.pages-readonly .gate{display:none}
-.pages-readonly #input{color:var(--text-secondary)}
-.pages-readonly .pages-deploy-button{max-width:none}
-.pages-import-note{max-width:720px;margin:0 auto var(--space-3);padding:0 var(--page-pad);color:var(--text-secondary);font-size:13px;line-height:1.4;text-align:center}
-.pages-readonly .mobile-sidebar-new-chat{justify-content:center}
+.pages-browser .gate{display:none}
 </style>
 <script>
 (()=>{
-  const pageStore={conversations:[],memories:[],projects:[],preferences:[],users:[],active:null};
+  const pageStore={conversations:[],memories:[],projects:[],preferences:[],users:[],profile:null,active:null};
   const TEXT_EXTENSIONS=new Set(['.json','.jsonl','.txt','.md','.markdown']);
-  const repoUrl='https://github.com/Shitsuten/chat-export-viewer';
-  const repoZip='https://github.com/Shitsuten/chat-export-viewer/archive/refs/heads/main.zip';
-  const readonlyPlaceholder='部署本项目即可接入自己的 API 继续聊天。这个 GitHub Pages 预览页只读，导入的数据只留在当前浏览器内存里。';
   const byId=id=>document.getElementById(id);
   const basename=name=>String(name||'').replaceAll('\\','/').split('/').pop();
   const ext=name=>{const b=basename(name).toLowerCase();const i=b.lastIndexOf('.');return i>=0?b.slice(i):''};
   const stableId=(...parts)=>{let h=2166136261;for(const ch of parts.join('\n')){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return (h>>>0).toString(16)};
   const jsonResponse=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
+  const dbName='chat-export-viewer-pages';
+  const storeName='snapshots';
 
-  function pagesBoot(){
-    document.body.classList.add('pages-readonly');
-    state.token='github-pages-readonly';
-    state.model='github-pages-readonly';
-    state.models=[{id:'github-pages-readonly',label:'GitHub Pages read-only',desc:'Local import preview',thinking:'none',primary:true}];
+  function openPageDb(){return new Promise((resolve,reject)=>{const request=indexedDB.open(dbName,1);request.onupgradeneeded=()=>{if(!request.result.objectStoreNames.contains(storeName))request.result.createObjectStore(storeName)};request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)})}
+  async function savePageStore(){try{const db=await openPageDb();const snapshot={conversations:pageStore.conversations,memories:pageStore.memories,projects:pageStore.projects,preferences:pageStore.preferences,users:pageStore.users,profile:pageStore.profile,activeId:pageStore.active?.conv_id||null};await new Promise((resolve,reject)=>{const tx=db.transaction(storeName,'readwrite');tx.objectStore(storeName).put(snapshot,'current');tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}catch(error){console.warn('Unable to persist browser data',error)}}
+  async function restorePageStore(){try{const db=await openPageDb();const snapshot=await new Promise((resolve,reject)=>{const tx=db.transaction(storeName,'readonly');const request=tx.objectStore(storeName).get('current');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error)});db.close();if(!snapshot)return;for(const key of ['conversations','memories','projects','preferences','users'])if(Array.isArray(snapshot[key]))pageStore[key]=snapshot[key];pageStore.profile=snapshot.profile||null;pageStore.active=pageStore.conversations.find(c=>c.conv_id===snapshot.activeId)||null}catch(error){console.warn('Unable to restore browser data',error)}}
+
+  async function pagesBoot(){
+    document.body.classList.add('pages-browser');
+    state.token='github-pages-browser';
+    state.external.enabled=true;
+    await restorePageStore();
+    syncBrowserModel();
     showChat();
     renderModelSheet();
     updateModelHeader();
-    setupReadonlyComposer();
-    setupReadonlySidebar();
-    setReadonlyEmpty();
-    _cachedSessions=[];
+    setupBrowserComposer();
+    setupBrowserSidebar();
+    _cachedSessions=sessionsFromStore();
     _renderSessions(_cachedSessions,byId('sessionList'));
+    if(pageStore.active)await openSession(pageStore.active);
+    else setBrowserEmpty();
     updateSessionHeader();
   }
 
-  function setupReadonlyComposer(){
-    input.value='';
-    input.placeholder=readonlyPlaceholder;
-    input.readOnly=true;
-    input.setAttribute('aria-label','Read-only GitHub Pages preview');
-    byId('micButton').classList.add('hidden');
-    byId('attachButton').onclick=()=>byId('exportImportInput').click();
-    send.innerHTML=icon('file');
-    send.classList.add('ready');
-    send.disabled=false;
-    send.setAttribute('aria-label','Download and deploy');
-    send.onclick=()=>window.open(repoUrl,'_blank','noopener,noreferrer');
-    const actions=document.querySelector('.composer-actions');
-    if(actions&&!byId('pagesDeployButton')){
-      const deploy=document.createElement('button');
-      deploy.type='button';
-      deploy.id='pagesDeployButton';
-      deploy.className='model-capsule pages-deploy-button';
-      deploy.textContent='Download & deploy';
-      deploy.onclick=()=>window.open(repoZip,'_blank','noopener,noreferrer');
-      actions.insertBefore(deploy,byId('micButton'));
-    }
-    const wrap=document.querySelector('.composer-wrap');
-    if(wrap&&!byId('pagesImportNote')){
-      const note=document.createElement('div');
-      note.id='pagesImportNote';
-      note.className='pages-import-note';
-      note.textContent='Import chats 可直接上传 Claude 导出的 zip；本页不保存、不上传、不续聊。';
-      wrap.insertBefore(note,wrap.firstChild);
-    }
+  function syncBrowserModel(){
+    normalizeExternal();
+    const fallback=state.external.provider==='anthropic'?'claude-sonnet-4-20250514':'gpt-4.1-mini';
+    const model=state.external.model||fallback;
+    state.model=model;
+    state.models=[{id:model,label:model,desc:state.external.provider==='anthropic'?'Anthropic API':'OpenAI-compatible API',thinking:'none',primary:true}];
+    localStorage.setItem('chat_model',model);
   }
 
-  function setupReadonlySidebar(){
+  function setupBrowserComposer(){
+    input.value='';
+    input.placeholder=pageStore.active?'Reply to Claude':'Chat with Claude';
+    input.readOnly=false;
+    input.setAttribute('aria-label','Chat with configured API');
+    byId('attachButton').onclick=()=>toast('浏览器直连模式暂不支持新附件；聊天导入请使用侧栏 Import chats');
+    updateSendButton();
+  }
+
+  function setupBrowserSidebar(){
     byId('importExport').onclick=()=>byId('exportImportInput').click();
     byId('exportImportInput').onchange=async e=>{
       const files=[...e.target.files];
       if(!files.length)return;
       try{await importFiles(files)}catch(err){toast(err.message||'导入失败')}finally{e.target.value=''}
     };
-    byId('drawerNewChat').onclick=()=>byId('exportImportInput').click();
+    byId('drawerNewChat').onclick=()=>newChat();
     const label=byId('drawerNewChat').querySelector('span:last-child');
-    if(label)label.textContent='Import chats';
-    byId('newChat').onclick=()=>byId('exportImportInput').click();
-    byId('openExternalApi').onclick=()=>{toast('部署本项目后即可接入自己的 API 续聊');window.open(repoUrl,'_blank','noopener,noreferrer')};
-    byId('openMemory').onclick=()=>openReadonlyMemory();
-    byId('starSession').onclick=()=>toast('GitHub Pages 预览页是只读的');
-    byId('renameSession').onclick=()=>toast('GitHub Pages 预览页是只读的');
-    byId('deleteSession').onclick=()=>toast('GitHub Pages 预览页是只读的');
-    byId('deleteConfirmBtn').onclick=()=>{closeActionMode();toast('GitHub Pages 预览页是只读的')};
-    byId('renameConfirmBtn').onclick=()=>{closeActionMode();toast('GitHub Pages 预览页是只读的')};
+    if(label)label.textContent='New chat';
+    byId('newChat').onclick=()=>newChat();
+    byId('openMemory').onclick=()=>openBrowserMemory();
+    byId('openExternalApi').onclick=()=>{closeDrawer();state.external.enabled=true;renderExternalPanel();byId('externalApiPanel').classList.add('show');byId('externalApiPanel').setAttribute('aria-hidden','false')};
+    byId('externalEnabled').onclick=()=>{state.external.enabled=true;renderExternalPanel();toast('GitHub Pages 始终使用浏览器直连')};
+    byId('saveExternalApi').onclick=()=>{state.external.enabled=true;state.external.provider=byId('externalProvider').value;state.external.endpoint=byId('externalEndpoint').value.trim();state.external.model=byId('externalModel').value.trim();state.external.apiKey=byId('externalApiKey').value.trim();state.external.systemPrompt=byId('externalSystemPrompt').value;state.external.temperature=Number(byId('externalTemperature').value||0.7);state.external.maxTokens=Number(byId('externalMaxTokens').value||2048);saveExternal();syncBrowserModel();renderModelSheet();updateModelHeader();toast('External API saved');byId('externalApiPanel').classList.remove('show');byId('externalApiPanel').setAttribute('aria-hidden','true')};
   }
 
-  function setReadonlyEmpty(){
+  function setBrowserEmpty(){
     state.convId=null;
-    state.currentTitle='只读导入预览';
+    state.currentTitle='新对话';
     state.starred=false;
     streamInner.innerHTML=`<div class="empty" id="empty">${logo('mark-35')}<div class="empty-line"></div></div>`;
-    byId('empty').querySelector('.empty-line').textContent='Upload a Claude export zip from Import chats';
-    appendDisclaimer();
+    byId('empty').querySelector('.empty-line').textContent=pageStore.conversations.length?'Start a new conversation':'Import chats, or start here';
+    input.placeholder='Chat with Claude';
   }
 
-  api=async function(path){
-    if(String(path).startsWith('/api/models'))return jsonResponse({models:[{id:'github-pages-readonly',name:'GitHub Pages read-only'}]});
-    if(String(path).startsWith('/api/profile'))return jsonResponse({profile:readonlyProfile()});
-    if(String(path).startsWith('/api/sessions')){
-      const match=String(path).match(/\/api\/sessions\/([^/]+)\/messages/);
+  api=async function(path,options={}){
+    const url=String(path),method=String(options.method||'GET').toUpperCase();
+    if(url.startsWith('/api/models'))return jsonResponse({models:state.models});
+    if(url.startsWith('/api/profile/memory')&&method==='POST'){
+      const body=JSON.parse(options.body||'{}'),profile=profileFromStore();
+      if(body.content?.trim())profile.savedMemories.unshift({id:`browser-memory-${Date.now()}`,content:body.content.trim(),enabled:true,source:'manual',createdAt:Date.now(),updatedAt:Date.now()});
+      pageStore.profile=profile;await savePageStore();return jsonResponse({saved:true,profile});
+    }
+    if(url.startsWith('/api/profile')){
+      if(method==='PUT'){pageStore.profile=normalizeProfileClient(JSON.parse(options.body||'{}'));await savePageStore()}
+      return jsonResponse({profile:profileFromStore()});
+    }
+    if(url.startsWith('/api/sessions')){
+      const match=url.match(/\/api\/sessions\/([^/]+)\/messages/);
       if(match){
         const id=decodeURIComponent(match[1]);
         const conv=pageStore.conversations.find(c=>c.conv_id===id);
         return jsonResponse({messages:conv?.messages||[],has_more:false,next_before_id:null});
       }
+      const itemMatch=url.match(/\/api\/sessions\/([^/]+)(?:\/(title|star))?$/);
+      if(itemMatch&&method!=='GET'){
+        const id=decodeURIComponent(itemMatch[1]),action=itemMatch[2],index=pageStore.conversations.findIndex(c=>c.conv_id===id);
+        if(index<0)return jsonResponse({detail:'Conversation not found'},404);
+        if(method==='DELETE'){
+          const [removed]=pageStore.conversations.splice(index,1);if(pageStore.active?.conv_id===removed.conv_id)pageStore.active=null;
+        }else{
+          const body=JSON.parse(options.body||'{}'),conv=pageStore.conversations[index];
+          if(action==='title'&&body.title)conv.title=String(body.title).slice(0,120);
+          if(action==='star')conv.starred=!!body.starred;
+        }
+        await savePageStore();return jsonResponse({ok:true});
+      }
       return jsonResponse({sessions:sessionsFromStore()});
     }
-    return jsonResponse({detail:'GitHub Pages preview is read-only'},405);
-  };
-
-  bindSessionMenu=function(button,session){
-    button.onclick=()=>openSession(session);
-    button.oncontextmenu=e=>{e.preventDefault();toast('GitHub Pages 预览页是只读的')};
+    if(url.startsWith('/api/tool-caption'))return jsonResponse({caption:'External API request'});
+    return jsonResponse({detail:'This feature needs a browser adapter'},405);
   };
 
   loadSessions=async function(){
@@ -1915,10 +1917,10 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     state.convId=conv.conv_id;
     state.legacySessionId=null;
     state.currentTitle=conv.title;
-    state.starred=false;
+    state.starred=!!conv.starred;
     state._historyHasMore=false;
     state._loadedMessages=conv.messages;
-    input.placeholder=readonlyPlaceholder;
+    input.placeholder='Reply to Claude';
     updateSessionHeader();
     _preprocessMessages(conv.messages);
     streamInner.innerHTML='';
@@ -1926,9 +1928,12 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     appendDisclaimer();
     _renderSessions(sessionsFromStore(),byId('sessionList'));
     scrollBottom();
+    await savePageStore();
   };
 
-  newChat=async function(){byId('exportImportInput').click()};
+  newChat=async function(){
+    closeDrawer();clearPendingFiles();pageStore.active=null;state.convId=null;state.legacySessionId=null;state.currentTitle='新对话';state.starred=false;localStorage.removeItem('chat_conversation');localStorage.removeItem('chat_session');setBrowserEmpty();updateSessionHeader();await savePageStore();input.focus();
+  };
 
   async function importFiles(files){
     toast('正在本地解析导出文件...');
@@ -1947,6 +1952,7 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     pageStore.projects=dedupeProjects(next.projects);
     pageStore.preferences=uniqueStrings(next.preferences).slice(0,30);
     pageStore.users=next.users;
+    pageStore.profile=null;
     _cachedSessions=sessionsFromStore();
     _renderSessions(_cachedSessions,byId('sessionList'));
     const messageCount=pageStore.conversations.reduce((n,c)=>n+c.messages.length,0);
@@ -1955,15 +1961,16 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     if(pageStore.preferences.length)extra.push(`${pageStore.preferences.length} preferences`);
     if(pageStore.projects.length)extra.push(`${pageStore.projects.length} projects`);
     toast(`导入 ${pageStore.conversations.length} 个会话，${messageCount} 条消息${extra.length?'，同步 '+extra.join(' / '):''}`);
+    await savePageStore();
     if(_cachedSessions[0])await openSession(_cachedSessions[0]);
-    else setReadonlyEmpty();
+    else setBrowserEmpty();
   }
 
   function sessionsFromStore(){
-    return pageStore.conversations.map(c=>({conv_id:c.conv_id,title:c.title,starred:false,updated_at:c.updated_at||c.created_at||''}));
+    return [...pageStore.conversations].sort((a,b)=>(Number(!!b.starred)-Number(!!a.starred))||String(b.updated_at||'').localeCompare(String(a.updated_at||''))).map(c=>({conv_id:c.conv_id,title:c.title,starred:!!c.starred,updated_at:c.updated_at||c.created_at||''}));
   }
 
-  function readonlyProfile(){
+  function importedProfile(){
     const user=pageStore.users[0]||{};
     const now=Date.now();
     return normalizeProfileClient({
@@ -1976,16 +1983,76 @@ if(state.token)showChat();updateSessionHeader();updateSendButton();
     });
   }
 
-  function openReadonlyMemory(){
+  function profileFromStore(){if(!pageStore.profile)pageStore.profile=importedProfile();return normalizeProfileClient(pageStore.profile)}
+
+  function openBrowserMemory(){
     closeDrawer();
-    profileState=readonlyProfile();
+    profileState=profileFromStore();
     profileDraft=cloneProfile(profileState);
     byId('memoryPanel').classList.add('show');
     byId('memoryPanel').setAttribute('aria-hidden','false');
     showProfilePage('profileHome');
     setProfileDirty(false);
-    document.querySelectorAll('#memoryPanel input,#memoryPanel textarea,#memoryPanel button.profile-save-button').forEach(el=>{el.disabled=true});
   }
+
+  function ensureActiveConversation(text){
+    if(pageStore.active)return pageStore.active;
+    const now=new Date().toISOString(),id=`page-local-${crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)}`;
+    const conv={conv_id:id,source_id:id,title:(text||'New chat').slice(0,120),summary:'',source:'browser',source_type:'browser-chat',created_at:now,updated_at:now,starred:false,messages:[]};
+    pageStore.conversations.unshift(conv);pageStore.active=conv;state.convId=id;state.currentTitle=conv.title;return conv;
+  }
+
+  function browserSystemPrompt(){
+    const profile=profileFromStore(),parts=[];
+    if(profile.fullName||profile.nickname)parts.push(`User profile:\nName: ${profile.fullName||''}\nPreferred name: ${profile.nickname||''}`.trim());
+    const memories=(profile.savedMemories||[]).filter(x=>x.enabled!==false&&String(x.content||'').trim()).map(x=>`- ${x.content}`);
+    if(memories.length)parts.push(`Saved memories:\n${memories.join('\n')}`);
+    if(profile.preferences?.enabled!==false&&profile.preferences?.content?.trim())parts.push(`User preferences:\n${profile.preferences.content.trim()}`);
+    if(state.external.systemPrompt?.trim())parts.push(state.external.systemPrompt.trim());
+    return parts.join('\n\n');
+  }
+
+  function providerMessages(conv){return conv.messages.filter(m=>['user','assistant'].includes(m.role)&&String(m.text||'').trim()).slice(-60).map(m=>({role:m.role,content:m.text}))}
+  function providerUrl(provider,endpoint){const base=(endpoint||(provider==='anthropic'?'https://api.anthropic.com':'https://api.openai.com/v1')).replace(/\/$/,'');if(provider==='anthropic')return /\/v1\/messages$/.test(base)?base:`${base}/v1/messages`;return /\/chat\/completions$/.test(base)?base:`${base}/chat/completions`}
+  async function readProviderStream(response,provider,onDelta){
+    const type=response.headers.get('content-type')||'';
+    if(type.includes('application/json')){const data=await response.json();const text=provider==='anthropic'?(data.content||[]).filter(x=>x.type==='text').map(x=>x.text||'').join(''):(data.choices?.[0]?.message?.content||'');if(text)onDelta(text);return text}
+    const reader=response.body?.getReader();if(!reader)return'';
+    const decoder=new TextDecoder();let buffer='',full='';
+    const consume=frame=>{const raw=frame.split(/\r?\n/).filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim()).join('\n');if(!raw||raw==='[DONE]')return;let data;try{data=JSON.parse(raw)}catch{return}const delta=provider==='anthropic'?(data.type==='content_block_delta'?data.delta?.text||'':''):(data.choices?.[0]?.delta?.content||'');if(delta){full+=delta;onDelta(delta)}};
+    while(true){const{value,done}=await reader.read();buffer+=decoder.decode(value||new Uint8Array(),{stream:!done});const frames=buffer.split(/\r?\n\r?\n/);buffer=frames.pop()||'';frames.forEach(consume);if(done)break}if(buffer.trim())consume(buffer);return full;
+  }
+
+  async function callBrowserProvider(conv,onDelta){
+    normalizeExternal();const provider=state.external.provider==='anthropic'?'anthropic':'openai-compatible',key=state.external.apiKey.trim(),model=state.external.model.trim();
+    if(!key)throw new Error('请先在 External API 填写 API key');
+    if(!model)throw new Error('请先在 External API 填写模型名');
+    const system=browserSystemPrompt(),messages=providerMessages(conv),headers={'Content-Type':'application/json'};let body;
+    if(provider==='anthropic'){
+      headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-access']='true';
+      body={model,messages,max_tokens:state.external.maxTokens||2048,temperature:state.external.temperature??0.7,stream:true};if(system)body.system=system;
+    }else{
+      headers.Authorization=`Bearer ${key}`;body={model,messages,max_tokens:state.external.maxTokens||2048,temperature:state.external.temperature??0.7,stream:true};if(system)body.messages=[{role:'system',content:system},...messages];
+    }
+    let response;try{response=await fetch(providerUrl(provider,state.external.endpoint),{method:'POST',headers,body:JSON.stringify(body)})}catch(error){throw new Error('浏览器无法连接 Provider。请检查 endpoint 和 CORS 设置')}
+    if(!response.ok){const detail=await response.text().catch(()=>'');throw new Error(`${provider==='anthropic'?'Anthropic':'OpenAI-compatible'} 请求失败 (${response.status})${detail?`: ${detail.slice(0,240)}`:''}`)}
+    return readProviderStream(response,provider,onDelta);
+  }
+
+  async function browserSendMessage(text,showUser=true,files=[],existingAttachments=[]){
+    if((!text&&!files.length&&!existingAttachments.length)||state.busy)return;if(files.length||existingAttachments.length){toast('浏览器直连模式暂不支持新附件');return}
+    state.busy=true;updateSendButton();let msg,conv;
+    try{
+      conv=ensureActiveConversation(text);
+      if(showUser){await dismissEmpty();const user={id:`browser-${Date.now()}-u`,role:'user',text,timestamp:new Date().toISOString(),thinking:'',attachments:[],traces:[]};conv.messages.push(user);addUser(text,user.timestamp,[]);input.value='';input.style.height='auto';clearPendingFiles()}
+      else if(conv.messages.at(-1)?.role==='assistant')conv.messages.pop();
+      conv.updated_at=new Date().toISOString();state.convId=conv.conv_id;state.currentTitle=conv.title;updateSessionHeader();await savePageStore();
+      msg=beginClaude(text,[]);let full='';await callBrowserProvider(conv,delta=>{full+=delta;msg.text(delta)});if(!full.trim())throw new Error('Provider 没有返回文本');
+      conv.messages.push({id:`browser-${Date.now()}-a`,role:'assistant',text:full,timestamp:new Date().toISOString(),thinking:'',attachments:[],traces:[]});conv.updated_at=new Date().toISOString();msg.finish();await savePageStore();await loadSessions();
+    }catch(error){if(msg)msg.fail(error.message||'连接失败');else toast(error.message||'连接失败')}
+    finally{state.busy=false;updateSendButton()}
+  }
+  sendMessage=browserSendMessage;
 
   function readUInt16(view,offset){return view.getUint16(offset,true)}
   function readUInt32(view,offset){return view.getUint32(offset,true)}
